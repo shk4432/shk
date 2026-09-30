@@ -33,6 +33,21 @@ python3 backtest.py BTCUSDT          # سیگنال‌ها و معاملات →
 python3 stats.py                     # آمار همه‌ی نمادها (همه‌ی فایل‌های data/trades_*.pkl لازم است)
 ```
 
+## تست سیگنال هر تایم‌فریم (نسخه‌ی فعلی اندیکاتور)
+
+`backtest_timeframes.py` منطق فعلی را تست می‌کند: هر واگرایی جدید در هر تایم‌فریم یک معامله است.
+* **نمادها:** BTC، EURUSD و طلا.
+* **حد ضرر:** پیووت همان تایم‌فریم.
+* **بدون محدودیت زمانی:** معامله فقط با تارگت یا حد ضرر بسته می‌شود.
+* **فیلتر:** با و بدون EMA 200 همان تایم‌فریم.
+
+```bash
+python3 backtest_timeframes.py BTCUSDT   # → data/trades_tf_BTCUSDT.pkl
+python3 stats_timeframes.py              # آمار هر تایم‌فریم (BTCUSDT، EURUSD، XAUUSD)
+```
+
+همه‌ی ۲۲٬۰۶۲ معامله در [`results/trades_per_timeframe.csv`](results/trades_per_timeframe.csv) است، همراه با زمان خروج هر تارگت.
+
 ## نتیجه
 
 * **گزارش کامل:** آمار هر نماد، هر گروه تایم‌فریم و هر حالت فیلتر در گزارش آنلاین است.
