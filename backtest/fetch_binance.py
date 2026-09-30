@@ -56,4 +56,4 @@ def fetch(sym, market, interval, start):
 
 sym = sys.argv[1]
 fetch(sym, SYMS[sym], '1d', dt.date(2017, 1, 1))
-fetch(sym, SYMS[sym], '5m', dt.date(2025, 7, 1))
+fetch(sym, SYMS[sym], '5m', dt.date(2025, 1, 1))

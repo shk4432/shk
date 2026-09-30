@@ -17,6 +17,8 @@
 //   - a divergence stays active until it is `validBars` bars old, or price closes
 //     beyond its second swing point, or price makes a new swing beyond it without
 //     a divergence.
+//   - optional trend filter: a bullish group is signalled only when price is above the
+//     EMA 200 (bearish: below) of the group's smallest or largest timeframe, or the daily.
 //
 // Every timeframe is evaluated on closed bars only, so signals do not repaint.
 indicator("Mega RSI MTF Divergence Scanner [SHK]", "MRSI MTF", overlay = true, max_labels_count = 500, max_lines_count = 500)
@@ -69,6 +71,14 @@ int needTF  = input.int(3, "Consecutive timeframes required", minval = 2, maxval
 bool syncOn = input.bool(true, "Same swing on all timeframes", group = G_TF, tooltip = "The second swing point of every timeframe in the group must fall inside the swing candle of the highest timeframe of the group (± the tolerance below). Stops unrelated divergences from being combined.")
 int syncTol = input.int(1, "Same-swing tolerance (candles of the highest TF)", minval = 0, maxval = 5, group = G_TF)
 
+const string G_TR     = "Trend filter"
+const string TR_OFF   = "Off"
+const string TR_SMALL = "EMA of the group's smallest timeframe"
+const string TR_LARGE = "EMA of the group's largest timeframe"
+const string TR_DAILY = "EMA of the daily chart"
+string trendMode = input.string(TR_SMALL, "Long only above / short only below", options = [TR_OFF, TR_SMALL, TR_LARGE, TR_DAILY], group = G_TR, tooltip = "Checked once, when a group fires: a bullish signal needs the chart price above the EMA, a bearish one below it. The EMA value of the last closed candle of that timeframe is used. A group that fires on the wrong side of the EMA is skipped for that swing.")
+int emaLen = input.int(200, "EMA length", minval = 2, group = G_TR)
+
 const string G_VIS = "Display & alerts"
 const string GR_UP  = "Timeframes ≥ chart timeframe"
 const string GR_ALL = "All groups"
@@ -96,6 +106,7 @@ type Div
     float p2
     int   osc = 0      // 1 = Mega RSI, 2 = RSI, 3 = both
     bool  hid = false  // hidden divergence
+    float ema          // trend EMA of this timeframe (last closed candle)
 
 // Rolling buffer, index 0 = current bar.
 pushBuf(array<float> buf, float v, int cap) =>
@@ -164,6 +175,7 @@ scanTF() =>
     float ciV   = ta.mom(rsiV, momLen) + ta.sma(ta.rsi(close, fastRsiLen), fastSmaLen)
     float loSrc = useClose ? close : low
     float hiSrc = useClose ? close : high
+    float emaV  = ta.ema(close, emaLen)
     float pl    = ta.pivotlow(loSrc, pivL, pivR)
     float ph    = ta.pivothigh(hiSrc, pivL, pivR)
     int cap     = maxDist + pivR + 2
@@ -274,7 +286,7 @@ scanTF() =>
         beOn := false
     int buAge = bar_index - buB2
     int beAge = bar_index - beB2
-    [buOn[1], buAge[1], buT1[1], buP1[1], buT2[1], buP2[1], buOsc[1], buHid[1], beOn[1], beAge[1], beT1[1], beP1[1], beT2[1], beP2[1], beOsc[1], beHid[1]]
+    [buOn[1], buAge[1], buT1[1], buP1[1], buT2[1], buP2[1], buOsc[1], buHid[1], beOn[1], beAge[1], beT1[1], beP1[1], beT2[1], beP2[1], beOsc[1], beHid[1], emaV[1]]
 
 // Requests one timeframe of the ladder and appends it to the ladder arrays.
 // scanTF() already returns closed-bar values, so:
@@ -286,11 +298,11 @@ scanTF() =>
 addTF(simple string tf, string name, simple bool enabled, array<Div> bus, array<Div> bes, array<string> names, array<int> secs) =>
     var Div bu = Div.new()
     var Div be = Div.new()
-    [a1, a2, a3, a4, a5, a6, a7, a8, s1, s2, s3, s4, s5, s6, s7, s8] = request.security(syminfo.tickerid, enabled ? tf : timeframe.period, scanTF(), lookahead = timeframe.in_seconds(enabled ? tf : timeframe.period) < timeframe.in_seconds() ? barmerge.lookahead_off : barmerge.lookahead_on)
+    [a1, a2, a3, a4, a5, a6, a7, a8, s1, s2, s3, s4, s5, s6, s7, s8, e1] = request.security(syminfo.tickerid, enabled ? tf : timeframe.period, scanTF(), lookahead = timeframe.in_seconds(enabled ? tf : timeframe.period) < timeframe.in_seconds() ? barmerge.lookahead_off : barmerge.lookahead_on)
     if not na(a5)
-        bu := Div.new(a1, a2, a3, a4, a5, a6, a7, a8)
+        bu := Div.new(a1, a2, a3, a4, a5, a6, a7, a8, e1)
     if not na(s5)
-        be := Div.new(s1, s2, s3, s4, s5, s6, s7, s8)
+        be := Div.new(s1, s2, s3, s4, s5, s6, s7, s8, e1)
     if enabled
         bus.push(bu)
         bes.push(be)
@@ -321,6 +333,19 @@ windowOK(array<Div> lad, array<int> secs, int j) =>
                 break
     [ok, anchor]
 
+// Trend filter, checked when a group fires. The ladder is sorted, so j is the group's smallest timeframe.
+trendOK(array<Div> lad, int j, bool isBull, float dailyEma) =>
+    float e = na
+    if trendMode == TR_SMALL
+        Div d = lad.get(j)
+        e := d.ema
+    else if trendMode == TR_LARGE
+        Div d = lad.get(j + needTF - 1)
+        e := d.ema
+    else if trendMode == TR_DAILY
+        e := dailyEma
+    trendMode == TR_OFF or (not na(e) and (isBull ? close > e : close < e))
+
 oscName(int code) =>
     code == 3 ? "RSI + Mega RSI" : code == 2 ? "RSI" : "Mega RSI"
 
@@ -343,6 +368,8 @@ cellText(Div d, string arrow) =>
 //#endregion
 
 //#region ───── Scan the ladder
+float dailyEma = request.security(syminfo.tickerid, "1D", ta.ema(close, emaLen)[1], lookahead = timeframe.in_seconds("1D") < timeframe.in_seconds() ? barmerge.lookahead_off : barmerge.lookahead_on)
+
 array<Div>    ladBu   = array.new<Div>()
 array<Div>    ladBe   = array.new<Div>()
 array<string> ladName = array.new<string>()
@@ -408,8 +435,14 @@ if n >= needTF
         // the ladder is sorted, so index j is the lowest timeframe of the group
         bool shown = groupMode == GR_ALL or ladSec.get(j) >= chartSec
         if gate
-            if okBu and not prevBu.get(j) and firedBu.get(j) != anchorBu and shown
+            // a group fires once per swing; the trend filter decides whether that firing is signalled
+            bool newBu = okBu and not prevBu.get(j) and firedBu.get(j) != anchorBu and shown
+            bool newBe = okBe and not prevBe.get(j) and firedBe.get(j) != anchorBe and shown
+            if newBu
                 firedBu.set(j, anchorBu)
+            if newBe
+                firedBe.set(j, anchorBe)
+            if newBu and trendOK(ladBu, j, true, dailyEma)
                 bullFire := true
                 bullTxt  += (bullTxt == "" ? "" : "\n") + grp
                 bullTip  += windowInfo(ladBu, ladName, j)
@@ -419,8 +452,7 @@ if n >= needTF
                         if drawnBu.get(k) != d.t2
                             drawDiv(d, ladName.get(k), true)
                             drawnBu.set(k, d.t2)
-            if okBe and not prevBe.get(j) and firedBe.get(j) != anchorBe and shown
-                firedBe.set(j, anchorBe)
+            if newBe and trendOK(ladBe, j, false, dailyEma)
                 bearFire := true
                 bearTxt  += (bearTxt == "" ? "" : "\n") + grp
                 bearTip  += windowInfo(ladBe, ladName, j)
