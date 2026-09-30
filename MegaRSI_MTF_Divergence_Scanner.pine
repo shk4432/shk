@@ -1,0 +1,492 @@
+//@version=6
+// Mega RSI MTF Divergence Scanner [SHK]
+//
+// Scans a fixed ladder of 19 timeframes (5m ... 1M) for divergences between price
+// and the Mega RSI (Composite Index = mom(RSI 14, 9) + SMA(RSI 3, 3)) and/or the RSI.
+// A signal is printed when N consecutive timeframes of the ladder (default 3, e.g.
+// 1D + 2D + 3D) show a divergence in the same direction at the same time.
+//
+// Divergence rules (evaluated on every timeframe separately):
+//   - swing points are price pivots (left/right bars below)
+//   - the two swing points must be 5..40 candles apart (of that timeframe)
+//   - regular bullish : price lower low   + oscillator higher low
+//     regular bearish : price higher high + oscillator lower high
+//     hidden (optional): price higher low / lower high + oscillator lower low / higher high
+//   - no candle between the two swing points may cross the straight line that joins
+//     them (optional: the same for the oscillator)
+//   - a divergence stays active until it is `validBars` bars old, or price closes
+//     beyond its second swing point, or price makes a new swing beyond it without
+//     a divergence.
+//
+// Every timeframe is evaluated on closed bars only, so signals do not repaint.
+indicator("Mega RSI MTF Divergence Scanner [SHK]", "MegaRSI MTF Div [SHK]", overlay = true, max_labels_count = 500, max_lines_count = 500)
+
+//#region ───── Inputs
+const string G_OSC = "Mega RSI"
+int rsiLen     = input.int(14, "RSI length", minval = 2, group = G_OSC)
+int momLen     = input.int(9, "RSI momentum length", minval = 1, group = G_OSC)
+int fastRsiLen = input.int(3, "Fast RSI length", minval = 2, group = G_OSC)
+int fastSmaLen = input.int(3, "Fast RSI SMA length", minval = 1, group = G_OSC)
+
+const string G_DIV  = "Divergence rules"
+const string M_CI   = "Mega RSI"
+const string M_BOTH = "RSI + Mega RSI (both)"
+const string M_ANY  = "RSI or Mega RSI (either)"
+const string M_RSI  = "RSI"
+string divMode   = input.string(M_CI, "Divergence between price and", options = [M_CI, M_BOTH, M_ANY, M_RSI], group = G_DIV, tooltip = "Mega RSI = the red Composite Index line of your indicator. The dashboard marks a divergence with ★ when RSI and Mega RSI both diverge.")
+int minDist      = input.int(5, "Min candles between the 2 swing points", minval = 1, group = G_DIV)
+int maxDist      = input.int(40, "Max candles between the 2 swing points", minval = 2, maxval = 200, group = G_DIV)
+int pivL         = input.int(5, "Swing point: left bars", minval = 1, maxval = 50, group = G_DIV)
+int pivR         = input.int(2, "Swing point: right bars (confirmation)", minval = 1, maxval = 20, group = G_DIV, tooltip = "A swing low/high is confirmed after this many candles of its own timeframe. Smaller = earlier signals, larger = fewer false swings.")
+bool useClose    = input.string("High/Low", "Swing point price", options = ["High/Low", "Close"], group = G_DIV) == "Close"
+bool useRegular  = input.bool(true, "Regular divergence", group = G_DIV, inline = "type")
+bool useHidden   = input.bool(false, "Hidden divergence", group = G_DIV, inline = "type")
+bool strictPx    = input.bool(true, "No candle may cross the price divergence line", group = G_DIV, tooltip = "Rejects a divergence when a candle between the two swing points pokes through the line joining them (e.g. a lower low in between), i.e. the two points must be the outer swing points.")
+bool strictOsc   = input.bool(false, "Oscillator may not cross its divergence line either", group = G_DIV, tooltip = "Very strict. Mega RSI is a fast oscillator, so this removes most divergences on higher timeframes.")
+int validBars    = input.int(20, "Divergence stays active for (candles of its own TF)", minval = 1, maxval = 500, group = G_DIV, tooltip = "Counted from the second swing point. A higher timeframe needs a few of its own candles to confirm a swing, so the lower timeframes of a group must stay active long enough to meet it.")
+
+const string G_TF = "Timeframe ladder"
+bool on5   = input.bool(true, "5m", group = G_TF, inline = "tf1")
+bool on10  = input.bool(true, "10m", group = G_TF, inline = "tf1")
+bool on15  = input.bool(true, "15m", group = G_TF, inline = "tf1")
+bool on30  = input.bool(true, "30m", group = G_TF, inline = "tf1")
+bool on60  = input.bool(true, "1H", group = G_TF, inline = "tf2")
+bool on120 = input.bool(true, "2H", group = G_TF, inline = "tf2")
+bool on180 = input.bool(true, "3H", group = G_TF, inline = "tf2")
+bool on240 = input.bool(true, "4H", group = G_TF, inline = "tf2")
+bool on360 = input.bool(true, "6H", group = G_TF, inline = "tf3")
+bool on480 = input.bool(true, "8H", group = G_TF, inline = "tf3")
+bool on600 = input.bool(true, "10H", group = G_TF, inline = "tf3")
+bool on720 = input.bool(true, "12H", group = G_TF, inline = "tf3")
+bool on1D  = input.bool(true, "1D", group = G_TF, inline = "tf4")
+bool on2D  = input.bool(true, "2D", group = G_TF, inline = "tf4")
+bool on3D  = input.bool(true, "3D", group = G_TF, inline = "tf4")
+bool on1W  = input.bool(true, "1W", group = G_TF, inline = "tf5")
+bool on2W  = input.bool(true, "2W", group = G_TF, inline = "tf5")
+bool on3W  = input.bool(true, "3W", group = G_TF, inline = "tf5")
+bool on1M  = input.bool(true, "1M", group = G_TF, inline = "tf5")
+int needTF  = input.int(3, "Consecutive timeframes required", minval = 2, maxval = 6, group = G_TF, tooltip = "Consecutive = neighbours in the ladder above. Unticking a timeframe removes it from the ladder, so its neighbours become consecutive.")
+bool syncOn = input.bool(true, "Same swing on all timeframes", group = G_TF, tooltip = "The second swing point of every timeframe in the group must fall inside the swing candle of the highest timeframe of the group (± the tolerance below). Stops unrelated divergences from being combined.")
+int syncTol = input.int(1, "Same-swing tolerance (candles of the highest TF)", minval = 0, maxval = 5, group = G_TF)
+
+const string G_VIS = "Display & alerts"
+const string GR_UP  = "Timeframes ≥ chart timeframe"
+const string GR_ALL = "All groups"
+string groupMode  = input.string(GR_UP, "Groups to signal on the chart", options = [GR_UP, GR_ALL], group = G_VIS, tooltip = "Labels, lines and alerts. 'Timeframes ≥ chart timeframe' skips groups that are too small to show on this chart (e.g. 5m · 10m · 15m on a daily chart). The dashboard always shows every active group.")
+bool showSignals  = input.bool(true, "Signal labels", group = G_VIS)
+bool showLines    = input.bool(true, "Divergence lines of the matched timeframes", group = G_VIS)
+bool showAllDivs  = input.bool(false, "Also draw every single-timeframe divergence", group = G_VIS)
+bool showBg       = input.bool(true, "Highlight signal candle", group = G_VIS)
+bool confirmClose = input.bool(true, "Signal only after the chart candle closes", group = G_VIS)
+bool showTable    = input.bool(true, "Dashboard", group = G_VIS)
+string tablePosIn = input.string("Top right", "Dashboard position", options = ["Top right", "Middle right", "Bottom right", "Top left", "Bottom left"], group = G_VIS)
+string tableSzIn  = input.string("Small", "Dashboard text size", options = ["Tiny", "Small", "Normal"], group = G_VIS)
+color bullCol     = input.color(#089981, "Bullish", group = G_VIS, inline = "col")
+color bearCol     = input.color(#f23645, "Bearish", group = G_VIS, inline = "col")
+//#endregion
+
+//#region ───── Types & helpers
+// State of the latest divergence of one direction on one timeframe.
+type Div
+    bool  on  = false
+    int   age = 0      // candles (of its own TF) since the second swing point
+    int   t1           // time of the first swing point
+    float p1
+    int   t2           // time of the second swing point
+    float p2
+    int   osc = 0      // 1 = Mega RSI, 2 = RSI, 3 = both
+    bool  hid = false  // hidden divergence
+
+// Rolling buffer, index 0 = current bar.
+pushBuf(array<float> buf, float v, int cap) =>
+    buf.unshift(v)
+    if buf.size() > cap
+        buf.pop()
+
+// True when the buffered series never crosses the straight line that joins the two swing points.
+// `off2` = bars back of the second swing point, `d` = bars between the two points.
+lineClear(array<float> buf, int off2, int d, float v1, float v2, bool stayAbove) =>
+    bool ok = true
+    if d > 1
+        for k = 1 to d - 1
+            float lv = v2 + (v1 - v2) * k / d
+            float sv = buf.get(off2 + k)
+            // touching the level of a swing point exactly (equal lows / highs) is not a cross
+            if sv != v1 and sv != v2 and (stayAbove ? sv < lv : sv > lv)
+                ok := false
+                break
+    ok
+
+// Looks, newest first, for an older swing point that forms a divergence with the new one.
+// Returns [index of the older swing point or -1, oscillator code, hidden flag].
+findDiv(bool isBull, int b2, float p2, float r2, float c2, array<int> pB, array<float> pP, array<float> pR, array<float> pC, array<float> bufPx, array<float> bufRsi, array<float> bufCi) =>
+    int match = -1
+    int oscK  = 0
+    bool hid  = false
+    int n     = pB.size()
+    if n > 0 and not na(r2) and not na(c2)
+        for i = 0 to n - 1
+            int d = b2 - pB.get(i)
+            if d > maxDist
+                break
+            float p1 = pP.get(i)
+            float r1 = pR.get(i)
+            float c1 = pC.get(i)
+            bool regular = isBull ? p2 < p1 : p2 > p1
+            bool hidden  = isBull ? p2 > p1 : p2 < p1
+            if d >= minDist and not na(r1) and not na(c1) and ((useRegular and regular) or (useHidden and hidden))
+                // a divergence = the oscillator moves against price
+                bool priceUp = p2 > p1
+                bool ciDiv   = priceUp ? c2 < c1 : c2 > c1
+                bool rsiDiv  = priceUp ? r2 < r1 : r2 > r1
+                bool pxOK    = true
+                if strictPx
+                    pxOK := lineClear(bufPx, pivR, d, p1, p2, isBull)
+                if strictOsc
+                    ciDiv  := ciDiv and lineClear(bufCi, pivR, d, c1, c2, isBull)
+                    rsiDiv := rsiDiv and lineClear(bufRsi, pivR, d, r1, r2, isBull)
+                bool oscOK = switch divMode
+                    M_CI   => ciDiv
+                    M_BOTH => ciDiv and rsiDiv
+                    M_ANY  => ciDiv or rsiDiv
+                    => rsiDiv
+                if pxOK and oscOK
+                    match := i
+                    oscK  := (ciDiv ? 1 : 0) + (rsiDiv ? 2 : 0)
+                    hid   := hidden
+                    break
+    [match, oscK, hid]
+
+// Runs inside request.security(): divergence state of the requested timeframe.
+// Every output is taken from the previous, closed bar so nothing repaints.
+scanTF() =>
+    float rsiV  = ta.rsi(close, rsiLen)
+    float ciV   = ta.mom(rsiV, momLen) + ta.sma(ta.rsi(close, fastRsiLen), fastSmaLen)
+    float loSrc = useClose ? close : low
+    float hiSrc = useClose ? close : high
+    float pl    = ta.pivotlow(loSrc, pivL, pivR)
+    float ph    = ta.pivothigh(hiSrc, pivL, pivR)
+    int cap     = maxDist + pivR + 2
+
+    var array<float> bLo  = array.new<float>()
+    var array<float> bHi  = array.new<float>()
+    var array<float> bRsi = array.new<float>()
+    var array<float> bCi  = array.new<float>()
+    pushBuf(bLo, loSrc, cap)
+    pushBuf(bHi, hiSrc, cap)
+    pushBuf(bRsi, rsiV, cap)
+    pushBuf(bCi, ciV, cap)
+
+    // Older swing lows (l*) and highs (h*), newest first: bar index, time, price, RSI, Mega RSI
+    var array<int>   lB = array.new<int>()
+    var array<int>   lT = array.new<int>()
+    var array<float> lP = array.new<float>()
+    var array<float> lR = array.new<float>()
+    var array<float> lC = array.new<float>()
+    var array<int>   hB = array.new<int>()
+    var array<int>   hT = array.new<int>()
+    var array<float> hP = array.new<float>()
+    var array<float> hR = array.new<float>()
+    var array<float> hC = array.new<float>()
+
+    // Active bullish (bu*) and bearish (be*) divergence
+    var bool  buOn  = false
+    var int   buB2  = na
+    var int   buT1  = na
+    var float buP1  = na
+    var int   buT2  = na
+    var float buP2  = na
+    var int   buOsc = 0
+    var bool  buHid = false
+    var bool  beOn  = false
+    var int   beB2  = na
+    var int   beT1  = na
+    var float beP1  = na
+    var int   beT2  = na
+    var float beP2  = na
+    var int   beOsc = 0
+    var bool  beHid = false
+
+    if not na(pl)
+        int b2   = bar_index - pivR
+        int t2   = time[pivR]
+        float r2 = bRsi.get(pivR)
+        float c2 = bCi.get(pivR)
+        [m, k, h] = findDiv(true, b2, pl, r2, c2, lB, lP, lR, lC, bLo, bRsi, bCi)
+        if m >= 0
+            buOn  := true
+            buB2  := b2
+            buT1  := lT.get(m)
+            buP1  := lP.get(m)
+            buT2  := t2
+            buP2  := pl
+            buOsc := k
+            buHid := h
+        else if buOn and pl < buP2
+            // new lower low without a divergence: the old bullish divergence failed
+            buOn := false
+        lB.unshift(b2)
+        lT.unshift(t2)
+        lP.unshift(pl)
+        lR.unshift(r2)
+        lC.unshift(c2)
+        if lB.size() > maxDist + 1
+            lB.pop()
+            lT.pop()
+            lP.pop()
+            lR.pop()
+            lC.pop()
+
+    if not na(ph)
+        int b2   = bar_index - pivR
+        int t2   = time[pivR]
+        float r2 = bRsi.get(pivR)
+        float c2 = bCi.get(pivR)
+        [m, k, h] = findDiv(false, b2, ph, r2, c2, hB, hP, hR, hC, bHi, bRsi, bCi)
+        if m >= 0
+            beOn  := true
+            beB2  := b2
+            beT1  := hT.get(m)
+            beP1  := hP.get(m)
+            beT2  := t2
+            beP2  := ph
+            beOsc := k
+            beHid := h
+        else if beOn and ph > beP2
+            // new higher high without a divergence: the old bearish divergence failed
+            beOn := false
+        hB.unshift(b2)
+        hT.unshift(t2)
+        hP.unshift(ph)
+        hR.unshift(r2)
+        hC.unshift(c2)
+        if hB.size() > maxDist + 1
+            hB.pop()
+            hT.pop()
+            hP.pop()
+            hR.pop()
+            hC.pop()
+
+    int life = math.max(validBars, pivR + 1)
+    if buOn and (bar_index - buB2 > life or close < buP2)
+        buOn := false
+    if beOn and (bar_index - beB2 > life or close > beP2)
+        beOn := false
+    int buAge = bar_index - buB2
+    int beAge = bar_index - beB2
+    [buOn[1], buAge[1], buT1[1], buP1[1], buT2[1], buP2[1], buOsc[1], buHid[1], beOn[1], beAge[1], beT1[1], beP1[1], beT2[1], beP2[1], beOsc[1], beHid[1]]
+
+// Requests one timeframe of the ladder and appends it to the ladder arrays.
+// scanTF() already returns closed-bar values, so:
+//   same / higher TF -> lookahead_on gives the last closed candle as soon as it closes, without lookahead bias
+//   lower TF         -> lookahead_off gives the last intrabar of the chart candle
+// A chart candle that contains no complete candle of a lower timeframe keeps that timeframe's last state.
+addTF(simple string tf, string name, bool enabled, array<Div> bus, array<Div> bes, array<string> names, array<int> secs) =>
+    if enabled
+        var Div bu = Div.new()
+        var Div be = Div.new()
+        [a1, a2, a3, a4, a5, a6, a7, a8, s1, s2, s3, s4, s5, s6, s7, s8] = request.security(syminfo.tickerid, tf, scanTF(), lookahead = timeframe.in_seconds(tf) < timeframe.in_seconds() ? barmerge.lookahead_off : barmerge.lookahead_on)
+        if not na(a5)
+            bu := Div.new(a1, a2, a3, a4, a5, a6, a7, a8)
+        if not na(s5)
+            be := Div.new(s1, s2, s3, s4, s5, s6, s7, s8)
+        bus.push(bu)
+        bes.push(be)
+        names.push(name)
+        secs.push(timeframe.in_seconds(tf))
+
+// Checks whether the `needTF` timeframes starting at ladder index `j` all have an active divergence
+// (and, if required, all of them belong to the same swing).
+// Returns [ok, second swing time of the highest timeframe of the group].
+windowOK(array<Div> lad, array<int> secs, int j) =>
+    bool ok    = true
+    int hiSec  = 0
+    int anchor = na
+    for k = j to j + needTF - 1
+        Div d = lad.get(k)
+        if na(d) or not d.on
+            ok := false
+            break
+        if secs.get(k) > hiSec
+            hiSec  := secs.get(k)
+            anchor := d.t2
+    if ok and syncOn
+        float w = hiSec * 1000.0
+        for k = j to j + needTF - 1
+            Div d = lad.get(k)
+            if d.t2 < anchor - syncTol * w or d.t2 >= anchor + (1 + syncTol) * w
+                ok := false
+                break
+    [ok, anchor]
+
+oscName(int code) =>
+    code == 3 ? "RSI + Mega RSI" : code == 2 ? "RSI" : "Mega RSI"
+
+divInfo(Div d, string name) =>
+    name + ": " + oscName(d.osc) + (d.hid ? " (hidden)" : "") + " | " + str.tostring(d.p1, format.mintick) + " → " + str.tostring(d.p2, format.mintick) + " | " + str.tostring(d.age) + " candles ago"
+
+windowInfo(array<Div> lad, array<string> names, int j) =>
+    string s = ""
+    for k = j to j + needTF - 1
+        s += divInfo(lad.get(k), names.get(k)) + "\n"
+    s
+
+drawDiv(Div d, string name, bool isBull) =>
+    color c = isBull ? bullCol : bearCol
+    line.new(d.t1, d.p1, d.t2, d.p2, xloc = xloc.bar_time, color = c, style = d.hid ? line.style_dashed : line.style_solid, width = 2)
+    label.new(d.t2, d.p2, name, xloc = xloc.bar_time, style = isBull ? label.style_label_up : label.style_label_down, color = color.new(c, 100), textcolor = c, size = size.small, tooltip = divInfo(d, name))
+
+cellText(Div d, string arrow) =>
+    d.on ? arrow + " " + str.tostring(d.age) + (d.osc == 3 ? " ★" : "") + (d.hid ? " H" : "") : "·"
+//#endregion
+
+//#region ───── Scan the ladder
+array<Div>    ladBu   = array.new<Div>()
+array<Div>    ladBe   = array.new<Div>()
+array<string> ladName = array.new<string>()
+array<int>    ladSec  = array.new<int>()
+
+addTF("5", "5m", on5, ladBu, ladBe, ladName, ladSec)
+addTF("10", "10m", on10, ladBu, ladBe, ladName, ladSec)
+addTF("15", "15m", on15, ladBu, ladBe, ladName, ladSec)
+addTF("30", "30m", on30, ladBu, ladBe, ladName, ladSec)
+addTF("60", "1H", on60, ladBu, ladBe, ladName, ladSec)
+addTF("120", "2H", on120, ladBu, ladBe, ladName, ladSec)
+addTF("180", "3H", on180, ladBu, ladBe, ladName, ladSec)
+addTF("240", "4H", on240, ladBu, ladBe, ladName, ladSec)
+addTF("360", "6H", on360, ladBu, ladBe, ladName, ladSec)
+addTF("480", "8H", on480, ladBu, ladBe, ladName, ladSec)
+addTF("600", "10H", on600, ladBu, ladBe, ladName, ladSec)
+addTF("720", "12H", on720, ladBu, ladBe, ladName, ladSec)
+addTF("1D", "1D", on1D, ladBu, ladBe, ladName, ladSec)
+addTF("2D", "2D", on2D, ladBu, ladBe, ladName, ladSec)
+addTF("3D", "3D", on3D, ladBu, ladBe, ladName, ladSec)
+addTF("1W", "1W", on1W, ladBu, ladBe, ladName, ladSec)
+addTF("2W", "2W", on2W, ladBu, ladBe, ladName, ladSec)
+addTF("3W", "3W", on3W, ladBu, ladBe, ladName, ladSec)
+addTF("1M", "1M", on1M, ladBu, ladBe, ladName, ladSec)
+//#endregion
+
+//#region ───── Signals
+int n = ladName.size()
+
+var array<bool> prevBu = array.new<bool>(19, false)   // window state on the previous closed candle
+var array<bool> prevBe = array.new<bool>(19, false)
+var array<int>  drawnBu = array.new<int>(19, 0)       // second swing time already drawn, per ladder index
+var array<int>  drawnBe = array.new<int>(19, 0)
+var array<int>  firedBu = array.new<int>(19, 0)       // swing already signalled, per group
+var array<int>  firedBe = array.new<int>(19, 0)
+array<bool> inBu = array.new<bool>(19, false)         // ladder index is part of an active group now
+array<bool> inBe = array.new<bool>(19, false)
+
+bool gate     = not confirmClose or barstate.isconfirmed
+int chartSec  = timeframe.in_seconds()
+bool bullFire = false
+bool bearFire = false
+string bullTxt = ""
+string bearTxt = ""
+string bullTip = ""
+string bearTip = ""
+string nowBu   = ""
+string nowBe   = ""
+
+if n >= needTF
+    for j = 0 to n - needTF
+        string grp = ladName.slice(j, j + needTF).join(" · ")
+        [okBu, anchorBu] = windowOK(ladBu, ladSec, j)
+        [okBe, anchorBe] = windowOK(ladBe, ladSec, j)
+        if okBu
+            nowBu += (nowBu == "" ? "" : "\n") + grp
+            for k = j to j + needTF - 1
+                inBu.set(k, true)
+        if okBe
+            nowBe += (nowBe == "" ? "" : "\n") + grp
+            for k = j to j + needTF - 1
+                inBe.set(k, true)
+        // the ladder is sorted, so index j is the lowest timeframe of the group
+        bool shown = groupMode == GR_ALL or ladSec.get(j) >= chartSec
+        if gate
+            if okBu and not prevBu.get(j) and firedBu.get(j) != anchorBu and shown
+                firedBu.set(j, anchorBu)
+                bullFire := true
+                bullTxt  += (bullTxt == "" ? "" : "\n") + grp
+                bullTip  += windowInfo(ladBu, ladName, j)
+                if showLines
+                    for k = j to j + needTF - 1
+                        Div d = ladBu.get(k)
+                        if drawnBu.get(k) != d.t2
+                            drawDiv(d, ladName.get(k), true)
+                            drawnBu.set(k, d.t2)
+            if okBe and not prevBe.get(j) and firedBe.get(j) != anchorBe and shown
+                firedBe.set(j, anchorBe)
+                bearFire := true
+                bearTxt  += (bearTxt == "" ? "" : "\n") + grp
+                bearTip  += windowInfo(ladBe, ladName, j)
+                if showLines
+                    for k = j to j + needTF - 1
+                        Div d = ladBe.get(k)
+                        if drawnBe.get(k) != d.t2
+                            drawDiv(d, ladName.get(k), false)
+                            drawnBe.set(k, d.t2)
+            prevBu.set(j, okBu)
+            prevBe.set(j, okBe)
+
+if showAllDivs and gate and n > 0
+    for k = 0 to n - 1
+        Div bu = ladBu.get(k)
+        Div be = ladBe.get(k)
+        if bu.on and drawnBu.get(k) != bu.t2
+            drawDiv(bu, ladName.get(k), true)
+            drawnBu.set(k, bu.t2)
+        if be.on and drawnBe.get(k) != be.t2
+            drawDiv(be, ladName.get(k), false)
+            drawnBe.set(k, be.t2)
+
+if showSignals and bullFire
+    label.new(bar_index, low, "▲ BULLISH DIV\n" + bullTxt, yloc = yloc.belowbar, style = label.style_label_up, color = bullCol, textcolor = color.white, size = size.small, tooltip = bullTip)
+if showSignals and bearFire
+    label.new(bar_index, high, "▼ BEARISH DIV\n" + bearTxt, yloc = yloc.abovebar, style = label.style_label_down, color = bearCol, textcolor = color.white, size = size.small, tooltip = bearTip)
+
+bgcolor(showBg and bullFire ? color.new(bullCol, 85) : showBg and bearFire ? color.new(bearCol, 85) : na, title = "Signal candle")
+plotshape(bullFire, "Bullish signal", shape.triangleup, location.belowbar, bullCol, size = size.tiny, display = display.data_window)
+plotshape(bearFire, "Bearish signal", shape.triangledown, location.abovebar, bearCol, size = size.tiny, display = display.data_window)
+
+alertcondition(bullFire, "Bullish MTF divergence", "Mega RSI: bullish divergence on consecutive timeframes ({{ticker}})")
+alertcondition(bearFire, "Bearish MTF divergence", "Mega RSI: bearish divergence on consecutive timeframes ({{ticker}})")
+if bullFire
+    alert("BULLISH Mega RSI divergence | " + syminfo.tickerid + " | timeframes: " + str.replace_all(bullTxt, "\n", " / ") + " | price " + str.tostring(close, format.mintick), alert.freq_once_per_bar)
+if bearFire
+    alert("BEARISH Mega RSI divergence | " + syminfo.tickerid + " | timeframes: " + str.replace_all(bearTxt, "\n", " / ") + " | price " + str.tostring(close, format.mintick), alert.freq_once_per_bar)
+//#endregion
+
+//#region ───── Dashboard
+tblPos = switch tablePosIn
+    "Top left"     => position.top_left
+    "Bottom left"  => position.bottom_left
+    "Middle right" => position.middle_right
+    "Bottom right" => position.bottom_right
+    => position.top_right
+tblSize = switch tableSzIn
+    "Tiny"   => size.tiny
+    "Normal" => size.normal
+    => size.small
+
+var table dash = table.new(tblPos, 3, 21, bgcolor = color.new(chart.bg_color, 10), frame_color = color.gray, frame_width = 1, border_color = color.new(color.gray, 70), border_width = 1)
+
+if showTable and barstate.islast
+    string legend = "Number = candles since the divergence (of that timeframe)\n★ = RSI and Mega RSI both diverge\nH = hidden divergence\n◂ = chart timeframe\nHighlighted = part of an active " + str.tostring(needTF) + "-timeframe group"
+    dash.cell(0, 0, "TF", text_color = chart.fg_color, text_size = tblSize, tooltip = legend)
+    dash.cell(1, 0, "Bull ▲", text_color = bullCol, text_size = tblSize, tooltip = legend)
+    dash.cell(2, 0, "Bear ▼", text_color = bearCol, text_size = tblSize, tooltip = legend)
+    if n > 0
+        for i = 0 to n - 1
+            Div bu = ladBu.get(i)
+            Div be = ladBe.get(i)
+            color nameBg = inBu.get(i) ? color.new(bullCol, 50) : inBe.get(i) ? color.new(bearCol, 50) : na
+            dash.cell(0, i + 1, ladName.get(i) + (ladSec.get(i) == chartSec ? " ◂" : ""), text_color = chart.fg_color, bgcolor = nameBg, text_size = tblSize)
+            dash.cell(1, i + 1, cellText(bu, "▲"), text_color = bu.on ? color.white : color.gray, bgcolor = bu.on ? color.new(bullCol, 25) : na, text_size = tblSize, tooltip = bu.on ? divInfo(bu, ladName.get(i)) : "")
+            dash.cell(2, i + 1, cellText(be, "▼"), text_color = be.on ? color.white : color.gray, bgcolor = be.on ? color.new(bearCol, 25) : na, text_size = tblSize, tooltip = be.on ? divInfo(be, ladName.get(i)) : "")
+    dash.cell(0, n + 1, "Now", text_color = chart.fg_color, text_size = tblSize)
+    dash.cell(1, n + 1, nowBu == "" ? "—" : nowBu, text_color = nowBu == "" ? color.gray : color.white, bgcolor = nowBu == "" ? na : bullCol, text_size = tblSize)
+    dash.cell(2, n + 1, nowBe == "" ? "—" : nowBe, text_color = nowBe == "" ? color.gray : color.white, bgcolor = nowBe == "" ? na : bearCol, text_size = tblSize)
+//#endregion
