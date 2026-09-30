@@ -19,7 +19,7 @@
 //     a divergence.
 //
 // Every timeframe is evaluated on closed bars only, so signals do not repaint.
-indicator("Mega RSI MTF Divergence Scanner [SHK]", "MegaRSI MTF Div [SHK]", overlay = true, max_labels_count = 500, max_lines_count = 500)
+indicator("Mega RSI MTF Divergence Scanner [SHK]", "MRSI MTF", overlay = true, max_labels_count = 500, max_lines_count = 500)
 
 //#region ───── Inputs
 const string G_OSC = "Mega RSI"
@@ -281,15 +281,17 @@ scanTF() =>
 //   same / higher TF -> lookahead_on gives the last closed candle as soon as it closes, without lookahead bias
 //   lower TF         -> lookahead_off gives the last intrabar of the chart candle
 // A chart candle that contains no complete candle of a lower timeframe keeps that timeframe's last state.
-addTF(simple string tf, string name, bool enabled, array<Div> bus, array<Div> bes, array<string> names, array<int> secs) =>
+// The request is made on every bar (scanTF must run on every bar); a disabled timeframe is parked on
+// the chart timeframe, which is cheap, and left out of the ladder.
+addTF(simple string tf, string name, simple bool enabled, array<Div> bus, array<Div> bes, array<string> names, array<int> secs) =>
+    var Div bu = Div.new()
+    var Div be = Div.new()
+    [a1, a2, a3, a4, a5, a6, a7, a8, s1, s2, s3, s4, s5, s6, s7, s8] = request.security(syminfo.tickerid, enabled ? tf : timeframe.period, scanTF(), lookahead = timeframe.in_seconds(enabled ? tf : timeframe.period) < timeframe.in_seconds() ? barmerge.lookahead_off : barmerge.lookahead_on)
+    if not na(a5)
+        bu := Div.new(a1, a2, a3, a4, a5, a6, a7, a8)
+    if not na(s5)
+        be := Div.new(s1, s2, s3, s4, s5, s6, s7, s8)
     if enabled
-        var Div bu = Div.new()
-        var Div be = Div.new()
-        [a1, a2, a3, a4, a5, a6, a7, a8, s1, s2, s3, s4, s5, s6, s7, s8] = request.security(syminfo.tickerid, tf, scanTF(), lookahead = timeframe.in_seconds(tf) < timeframe.in_seconds() ? barmerge.lookahead_off : barmerge.lookahead_on)
-        if not na(a5)
-            bu := Div.new(a1, a2, a3, a4, a5, a6, a7, a8)
-        if not na(s5)
-            be := Div.new(s1, s2, s3, s4, s5, s6, s7, s8)
         bus.push(bu)
         bes.push(be)
         names.push(name)
