@@ -7,7 +7,10 @@
 // bullish divergence = buy, bearish divergence = sell.
 //
 // Divergence rules (evaluated on every timeframe separately):
-//   - swing points are price pivots (left/right bars below)
+//   - swing points are price pivots (left/right bars below). By default the signal comes on
+//     the candle that forms the divergence (a new low/high that the oscillator does not
+//     confirm); the first swing point must be a confirmed pivot. Optionally the second swing
+//     point can also wait for confirmation.
 //   - the two swing points must be 5..40 candles apart (of that timeframe)
 //   - regular bullish : price lower low   + oscillator higher low
 //     regular bearish : price higher high + oscillator lower high
@@ -20,7 +23,7 @@
 //   - optional trend filter: a buy is signalled only when price is above the EMA 200
 //     (sell: below) of the divergence's own timeframe, or of the daily chart.
 //
-// Every timeframe is evaluated on closed bars only, so signals do not repaint.
+// Signals are taken at the close of the chart candle, so they do not repaint.
 indicator("Mega RSI MTF Divergence Scanner [SHK]", "MRSI MTF", overlay = true, max_labels_count = 500, max_lines_count = 500)
 
 //#region ───── Inputs
@@ -39,7 +42,11 @@ string divMode   = input.string(M_CI, "Divergence between price and", options = 
 int minDist      = input.int(5, "Min candles between the 2 swing points", minval = 1, group = G_DIV)
 int maxDist      = input.int(40, "Max candles between the 2 swing points", minval = 2, maxval = 200, group = G_DIV)
 int pivL         = input.int(5, "Swing point: left bars", minval = 1, maxval = 50, group = G_DIV)
-int pivR         = input.int(2, "Swing point: right bars (confirmation)", minval = 1, maxval = 20, group = G_DIV, tooltip = "A swing low/high is confirmed after this many candles of its own timeframe. Smaller = earlier signals, larger = fewer false swings.")
+int pivR         = input.int(2, "Swing point: right bars (confirmation)", minval = 1, maxval = 20, group = G_DIV, tooltip = "A swing low/high is confirmed after this many candles of its own timeframe. Always used for the first swing point; used for the second one only with 'After the swing is confirmed'.")
+const string SIG_EARLY = "On the divergence candle"
+const string SIG_CONF  = "After the swing is confirmed"
+string sigTiming = input.string(SIG_EARLY, "Signal timing", options = [SIG_EARLY, SIG_CONF], group = G_DIV, tooltip = "On the divergence candle: the signal comes at the close of the candle that makes a new low (high) of the last 'left bars' candles while the oscillator makes a higher low (lower high). After the swing is confirmed: waits until that candle is a confirmed pivot ('right bars' candles later): fewer false signals, later entry.")
+bool early       = sigTiming == SIG_EARLY
 bool useClose    = input.string("High/Low", "Swing point price", options = ["High/Low", "Close"], group = G_DIV) == "Close"
 bool useRegular  = input.bool(true, "Regular divergence", group = G_DIV, inline = "type")
 bool useHidden   = input.bool(false, "Hidden divergence", group = G_DIV, inline = "type")
@@ -82,7 +89,7 @@ string tfMode     = input.string(TFS_UP, "Timeframes to signal on the chart", op
 bool showSignals  = input.bool(true, "Signal labels", group = G_VIS)
 bool showLines    = input.bool(true, "Divergence line of each signal", group = G_VIS)
 bool showBg       = input.bool(true, "Highlight signal candle", group = G_VIS)
-bool confirmClose = input.bool(true, "Signal only after the chart candle closes", group = G_VIS)
+bool confirmClose = input.bool(true, "Signal only after the chart candle closes", group = G_VIS, tooltip = "Keep this on: the chart's own and lower timeframes are read from the current candle, so a signal shown before the candle closes can still disappear.")
 bool showTable    = input.bool(true, "Dashboard", group = G_VIS)
 string tablePosIn = input.string("Top right", "Dashboard position", options = ["Top right", "Middle right", "Bottom right", "Top left", "Bottom left"], group = G_VIS)
 string tableSzIn  = input.string("Small", "Dashboard text size", options = ["Tiny", "Small", "Normal"], group = G_VIS)
@@ -125,7 +132,8 @@ lineClear(array<float> buf, int off2, int d, float v1, float v2, bool stayAbove)
 
 // Looks, newest first, for an older swing point that forms a divergence with the new one.
 // Returns [index of the older swing point or -1, oscillator code, hidden flag].
-findDiv(bool isBull, int b2, float p2, float r2, float c2, array<int> pB, array<float> pP, array<float> pR, array<float> pC, array<float> bufPx, array<float> bufRsi, array<float> bufCi) =>
+// `off2` = bars back of the second swing point (0 = current candle).
+findDiv(bool isBull, int b2, float p2, float r2, float c2, array<int> pB, array<float> pP, array<float> pR, array<float> pC, array<float> bufPx, array<float> bufRsi, array<float> bufCi, int off2) =>
     int match = -1
     int oscK  = 0
     bool hid  = false
@@ -147,10 +155,10 @@ findDiv(bool isBull, int b2, float p2, float r2, float c2, array<int> pB, array<
                 bool rsiDiv  = priceUp ? r2 < r1 : r2 > r1
                 bool pxOK    = true
                 if strictPx
-                    pxOK := lineClear(bufPx, pivR, d, p1, p2, isBull)
+                    pxOK := lineClear(bufPx, off2, d, p1, p2, isBull)
                 if strictOsc
-                    ciDiv  := ciDiv and lineClear(bufCi, pivR, d, c1, c2, isBull)
-                    rsiDiv := rsiDiv and lineClear(bufRsi, pivR, d, r1, r2, isBull)
+                    ciDiv  := ciDiv and lineClear(bufCi, off2, d, c1, c2, isBull)
+                    rsiDiv := rsiDiv and lineClear(bufRsi, off2, d, r1, r2, isBull)
                 bool oscOK = switch divMode
                     M_CI   => ciDiv
                     M_BOTH => ciDiv and rsiDiv
@@ -164,8 +172,11 @@ findDiv(bool isBull, int b2, float p2, float r2, float c2, array<int> pB, array<
     [match, oscK, hid]
 
 // Runs inside request.security(): divergence state of the requested timeframe.
-// Every output is taken from the previous, closed bar so nothing repaints.
+// Timeframes above the chart's return the state of their last closed candle, so they cannot repaint;
+// the chart's own and lower timeframes return the current candle (read at the chart candle's close).
+// Inside a request, timeframe.period is the requested timeframe and timeframe.main_period the chart's.
 scanTF() =>
+    int sh      = timeframe.in_seconds(timeframe.period) > timeframe.in_seconds(timeframe.main_period) ? 1 : 0
     float rsiV  = ta.rsi(close, rsiLen)
     float ciV   = ta.mom(rsiV, momLen) + ta.sma(ta.rsi(close, fastRsiLen), fastSmaLen)
     float loSrc = useClose ? close : low
@@ -173,6 +184,12 @@ scanTF() =>
     float emaV  = ta.ema(close, emaLen)
     float pl    = ta.pivotlow(loSrc, pivL, pivR)
     float ph    = ta.pivothigh(hiSrc, pivL, pivR)
+    float lowL  = ta.lowest(loSrc, pivL)
+    float highL = ta.highest(hiSrc, pivL)
+    // early timing: this candle is the low (high) of itself and the pivL candles before it
+    bool newLow  = early and not na(lowL[1]) and loSrc <= lowL[1]
+    bool newHigh = early and not na(highL[1]) and hiSrc >= highL[1]
+    int off      = early ? 0 : pivR
     int cap     = maxDist + pivR + 2
 
     var array<float> bLo  = array.new<float>()
@@ -214,29 +231,33 @@ scanTF() =>
     var int   beOsc = 0
     var bool  beHid = false
 
-    if not na(pl)
-        int b2   = bar_index - pivR
-        int t2   = time[pivR]
-        float r2 = bRsi.get(pivR)
-        float c2 = bCi.get(pivR)
-        [m, k, h] = findDiv(true, b2, pl, r2, c2, lB, lP, lR, lC, bLo, bRsi, bCi)
+    // second swing low: the current candle (early timing) or a confirmed pivot
+    if early ? newLow : not na(pl)
+        int b2   = bar_index - off
+        int t2   = time[off]
+        float p2 = bLo.get(off)
+        float r2 = bRsi.get(off)
+        float c2 = bCi.get(off)
+        [m, k, h] = findDiv(true, b2, p2, r2, c2, lB, lP, lR, lC, bLo, bRsi, bCi, off)
         if m >= 0
             buOn  := true
             buB2  := b2
             buT1  := lT.get(m)
             buP1  := lP.get(m)
             buT2  := t2
-            buP2  := pl
+            buP2  := p2
             buOsc := k
             buHid := h
-        else if buOn and pl < buP2
+        else if buOn and p2 < buP2
             // new lower low without a divergence: the old bullish divergence failed
             buOn := false
-        lB.unshift(b2)
-        lT.unshift(t2)
+    // confirmed swing lows are the candidates for the first swing point
+    if not na(pl)
+        lB.unshift(bar_index - pivR)
+        lT.unshift(time[pivR])
         lP.unshift(pl)
-        lR.unshift(r2)
-        lC.unshift(c2)
+        lR.unshift(bRsi.get(pivR))
+        lC.unshift(bCi.get(pivR))
         if lB.size() > maxDist + 1
             lB.pop()
             lT.pop()
@@ -244,29 +265,33 @@ scanTF() =>
             lR.pop()
             lC.pop()
 
-    if not na(ph)
-        int b2   = bar_index - pivR
-        int t2   = time[pivR]
-        float r2 = bRsi.get(pivR)
-        float c2 = bCi.get(pivR)
-        [m, k, h] = findDiv(false, b2, ph, r2, c2, hB, hP, hR, hC, bHi, bRsi, bCi)
+    // second swing high: the current candle (early timing) or a confirmed pivot
+    if early ? newHigh : not na(ph)
+        int b2   = bar_index - off
+        int t2   = time[off]
+        float p2 = bHi.get(off)
+        float r2 = bRsi.get(off)
+        float c2 = bCi.get(off)
+        [m, k, h] = findDiv(false, b2, p2, r2, c2, hB, hP, hR, hC, bHi, bRsi, bCi, off)
         if m >= 0
             beOn  := true
             beB2  := b2
             beT1  := hT.get(m)
             beP1  := hP.get(m)
             beT2  := t2
-            beP2  := ph
+            beP2  := p2
             beOsc := k
             beHid := h
-        else if beOn and ph > beP2
+        else if beOn and p2 > beP2
             // new higher high without a divergence: the old bearish divergence failed
             beOn := false
-        hB.unshift(b2)
-        hT.unshift(t2)
+    // confirmed swing highs are the candidates for the first swing point
+    if not na(ph)
+        hB.unshift(bar_index - pivR)
+        hT.unshift(time[pivR])
         hP.unshift(ph)
-        hR.unshift(r2)
-        hC.unshift(c2)
+        hR.unshift(bRsi.get(pivR))
+        hC.unshift(bCi.get(pivR))
         if hB.size() > maxDist + 1
             hB.pop()
             hT.pop()
@@ -281,12 +306,12 @@ scanTF() =>
         beOn := false
     int buAge = bar_index - buB2
     int beAge = bar_index - beB2
-    [buOn[1], buAge[1], buT1[1], buP1[1], buT2[1], buP2[1], buOsc[1], buHid[1], beOn[1], beAge[1], beT1[1], beP1[1], beT2[1], beP2[1], beOsc[1], beHid[1], emaV[1]]
+    [buOn[sh], buAge[sh], buT1[sh], buP1[sh], buT2[sh], buP2[sh], buOsc[sh], buHid[sh], beOn[sh], beAge[sh], beT1[sh], beP1[sh], beT2[sh], beP2[sh], beOsc[sh], beHid[sh], emaV[sh]]
 
 // Requests one timeframe of the ladder and appends it to the ladder arrays.
-// scanTF() already returns closed-bar values, so:
-//   same / higher TF -> lookahead_on gives the last closed candle as soon as it closes, without lookahead bias
-//   lower TF         -> lookahead_off gives the last intrabar of the chart candle
+// Higher timeframe: scanTF() returns the last closed candle and lookahead_on delivers it as soon as it
+// closes, without lookahead bias. Same timeframe: the current chart candle. Lower timeframe:
+// lookahead_off gives the last intrabar of the chart candle.
 // A chart candle that contains no complete candle of a lower timeframe keeps that timeframe's last state.
 // The request is made on every bar (scanTF must run on every bar); a disabled timeframe is parked on
 // the chart timeframe, which is cheap, and left out of the ladder.
@@ -325,7 +350,7 @@ cellText(Div d, string arrow) =>
 //#endregion
 
 //#region ───── Scan the ladder
-float dailyEma = request.security(syminfo.tickerid, "1D", ta.ema(close, emaLen)[1], lookahead = timeframe.in_seconds("1D") < timeframe.in_seconds() ? barmerge.lookahead_off : barmerge.lookahead_on)
+float dailyEma = request.security(syminfo.tickerid, "1D", ta.ema(close, emaLen)[timeframe.in_seconds(timeframe.period) > timeframe.in_seconds(timeframe.main_period) ? 1 : 0], lookahead = timeframe.in_seconds("1D") < timeframe.in_seconds() ? barmerge.lookahead_off : barmerge.lookahead_on)
 
 array<Div>    ladBu   = array.new<Div>()
 array<Div>    ladBe   = array.new<Div>()

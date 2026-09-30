@@ -1,12 +1,13 @@
 """Aggregates data/trades_tf_*.pkl (per-timeframe signals, no time limit) into report rows and prints an overview."""
-import pickle, json, os, statistics as st
+import pickle, json, os, sys, statistics as st
 HERE = os.path.dirname(os.path.abspath(__file__))
 SYMS = ['BTCUSDT', 'EURUSD', 'XAUUSD']
+RUN = sys.argv[1] if len(sys.argv) > 1 else 'early2'   # e.g. early2, conf2, conf1
 TFS = ['5m', '10m', '15m', '30m', '1H', '2H', '3H', '4H', '6H', '8H', '10H', '12H', '1D', '2D', '3D', '1W', '2W', '3W', '1M']
 
 
 def load(sym):
-    return pickle.load(open(f'{HERE}/data/trades_tf_{sym}.pkl', 'rb'))['trades']
+    return pickle.load(open(f'{HERE}/data/trades_tf_{RUN}_{sym}.pkl', 'rb'))['trades']
 
 
 def passes(t, f):
@@ -63,8 +64,8 @@ def build():
 
 if __name__ == '__main__':
     rows = build()
-    json.dump(dict(tfs=TFS, rows=rows), open(f'{HERE}/data/report_tf_data.json', 'w'), separators=(',', ':'))
-    print('rows', len(rows), os.path.getsize(f'{HERE}/data/report_tf_data.json'))
+    json.dump(dict(tfs=TFS, rows=rows), open(f'{HERE}/data/report_tf_{RUN}.json', 'w'), separators=(',', ':'))
+    print('rows', len(rows), os.path.getsize(f'{HERE}/data/report_tf_{RUN}.json'))
     ix = {tuple(r[:5]): r for r in rows}
     for sym in SYMS:
         for f in ('none', 'ema'):

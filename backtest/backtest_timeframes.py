@@ -1,6 +1,7 @@
 """Backtest of the per-timeframe signals (current indicator logic).
 
 Every new divergence on any of the 19 timeframes is a trade: bullish = long, bearish = short.
+  timing : 'early' = the candle that forms the divergence; 'conf' = after pivR confirmation candles
   entry  : close of the first 5m candle on which the divergence is visible (alert moment)
   stop   : low (long) / high (short) of that timeframe's pivot candle of divergence point 2
   targets: 1R, 2R, 3R, each on its own; no time limit - a trade ends only at target or stop
@@ -15,9 +16,10 @@ from backtest import ref, MARKET, COST_SIDE, DAY, MIN, TF_OF
 NO_LIMIT = 10 ** 15
 
 
-def signals(candles, t0, t1):
+def signals(candles, t0, t1, early, pivR=2):
     ref.candles = candles
-    chart, per_tf, _ = ref.mtf('5', t0, t1, p=dict(ref.P), buf_days=4000)
+    P = dict(ref.P); P['early'] = early; P['pivR'] = pivR
+    chart, per_tf, _ = ref.mtf('5', t0, t1, p=P, buf_days=4000)
     sigs = []
     for tf, nm, sec, vals in per_tf:
         fired = {'bu': 0, 'be': 0}
@@ -69,7 +71,8 @@ def simulate(sig, bars5, times5, cost_side):
     return dict(R=R, riskPct=R / E * 100, out=out, cost=cost, mfe=mfe, exit_t=exit_t)
 
 
-def run(sym):
+def run(sym, timing, pivR=2):
+    early = timing == 'early'
     market = MARKET[sym]
     if market == 'crypto':
         candles, base5 = bt2.load_crypto(sym)
@@ -83,16 +86,18 @@ def run(sym):
     times5 = [b[0] for b in base5]
     ix = bt2.TFIndex(candles)
     trades = []
-    for s in signals(candles, t0, t1):
+    for s in signals(candles, t0, t1, early, pivR):
         if not (t0 <= s['t'] <= t1 + 5 * MIN):
             continue
-        s['ema'] = ix.ema_at(TF_OF[s['tf']], s['ot'])
+        # the chart's own timeframe (5m) is read from the current candle, higher ones from the last closed candle
+        s['ema'] = ix.ema_at(TF_OF[s['tf']], s['t'] if s['tf'] == '5m' else s['ot'])
         r = simulate(s, base5, times5, COST_SIDE[market])
         s.update(sym=sym, market=market, **r)
         trades.append(s)
-    pickle.dump(dict(trades=trades, t0=t0, t1=t1, last=base5[-1][0]), open(f'{HERE}/data/trades_tf_{sym}.pkl', 'wb'))
+    pickle.dump(dict(trades=trades, t0=t0, t1=t1, last=base5[-1][0]), open(f'{HERE}/data/trades_tf_{timing}{pivR}_{sym}.pkl', 'wb'))
     print(sym, 'signals', len(trades), dt.datetime.utcfromtimestamp(t0 / 1000).date(), '->', dt.datetime.utcfromtimestamp(t1 / 1000).date(), flush=True)
 
 
 if __name__ == '__main__':
-    run(sys.argv[1])
+    # python3 backtest_timeframes.py BTCUSDT early|conf [pivR]
+    run(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else 'early', int(sys.argv[3]) if len(sys.argv) > 3 else 2)

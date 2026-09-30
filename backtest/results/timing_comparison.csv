@@ -1,0 +1,145 @@
+symbol,signal_timing,timeframes,trend_filter,target,trades,wins,losses,win_pct,avg_R_gross,avg_R_net,ci95_net
+BTCUSDT,early (divergence candle),2H-12H,none,1R,1193,589,603,49.4,-0.012,-0.364,0.13
+BTCUSDT,early (divergence candle),2H-12H,none,2R,1193,409,780,34.4,0.032,-0.32,0.142
+BTCUSDT,early (divergence candle),2H-12H,none,3R,1193,310,879,26.1,0.043,-0.31,0.154
+BTCUSDT,early (divergence candle),2H-12H,EMA 200,1R,355,176,178,49.7,-0.006,-0.244,0.11
+BTCUSDT,early (divergence candle),2H-12H,EMA 200,2R,355,135,216,38.5,0.154,-0.086,0.157
+BTCUSDT,early (divergence candle),2H-12H,EMA 200,3R,355,102,249,29.1,0.162,-0.077,0.194
+BTCUSDT,early (divergence candle),all timeframes,none,1R,18305,8170,10133,44.6,-0.107,-189.14,17.733
+BTCUSDT,early (divergence candle),all timeframes,none,2R,18305,5985,12315,32.7,-0.019,-189.083,17.736
+BTCUSDT,early (divergence candle),all timeframes,none,3R,18305,4708,13585,25.7,0.029,-189.107,17.743
+BTCUSDT,early (divergence candle),all timeframes,EMA 200,1R,5118,2363,2754,46.2,-0.076,-177.131,32.79
+BTCUSDT,early (divergence candle),all timeframes,EMA 200,2R,5118,1750,3364,34.2,0.027,-177.131,32.809
+BTCUSDT,early (divergence candle),all timeframes,EMA 200,3R,5118,1372,3740,26.8,0.074,-177.154,32.822
+EURUSD,early (divergence candle),2H-12H,none,1R,849,456,391,53.8,0.076,-0.517,0.165
+EURUSD,early (divergence candle),2H-12H,none,2R,849,336,511,39.7,0.189,-0.404,0.18
+EURUSD,early (divergence candle),2H-12H,none,3R,849,244,603,28.8,0.149,-0.444,0.194
+EURUSD,early (divergence candle),2H-12H,EMA 200,1R,204,122,82,59.8,0.196,-0.438,0.371
+EURUSD,early (divergence candle),2H-12H,EMA 200,2R,204,100,104,49.0,0.47,-0.164,0.405
+EURUSD,early (divergence candle),2H-12H,EMA 200,3R,204,61,143,29.9,0.196,-0.438,0.427
+EURUSD,early (divergence candle),all timeframes,none,1R,15035,6387,8644,42.5,-0.193,-2.962,0.106
+EURUSD,early (divergence candle),all timeframes,none,2R,15035,4662,10368,31.0,-0.112,-2.881,0.107
+EURUSD,early (divergence candle),all timeframes,none,3R,15035,3708,11316,24.7,-0.057,-2.827,0.108
+EURUSD,early (divergence candle),all timeframes,EMA 200,1R,4108,1845,2263,44.9,-0.237,-2.811,0.3
+EURUSD,early (divergence candle),all timeframes,EMA 200,2R,4108,1331,2776,32.4,-0.164,-2.739,0.301
+EURUSD,early (divergence candle),all timeframes,EMA 200,3R,4108,1059,3048,25.8,-0.105,-2.68,0.302
+XAUUSD,early (divergence candle),2H-12H,none,1R,890,416,474,46.7,-0.066,-0.191,0.071
+XAUUSD,early (divergence candle),2H-12H,none,2R,890,301,588,33.9,0.015,-0.11,0.097
+XAUUSD,early (divergence candle),2H-12H,none,3R,890,224,663,25.3,0.006,-0.119,0.118
+XAUUSD,early (divergence candle),2H-12H,EMA 200,1R,154,80,74,51.9,0.039,-0.062,0.169
+XAUUSD,early (divergence candle),2H-12H,EMA 200,2R,154,59,95,38.3,0.149,0.048,0.237
+XAUUSD,early (divergence candle),2H-12H,EMA 200,3R,154,43,111,27.9,0.117,0.016,0.288
+XAUUSD,early (divergence candle),all timeframes,none,1R,13577,5644,7933,41.6,-0.204,-1.087,0.081
+XAUUSD,early (divergence candle),all timeframes,none,2R,13577,4063,9506,29.9,-0.14,-1.024,0.083
+XAUUSD,early (divergence candle),all timeframes,none,3R,13577,3202,10364,23.6,-0.095,-0.979,0.085
+XAUUSD,early (divergence candle),all timeframes,EMA 200,1R,3383,1452,1931,42.9,-0.254,-1.077,0.218
+XAUUSD,early (divergence candle),all timeframes,EMA 200,2R,3383,1041,2339,30.8,-0.194,-1.018,0.22
+XAUUSD,early (divergence candle),all timeframes,EMA 200,3R,3383,849,2530,25.1,-0.113,-0.937,0.223
+ALL,early (divergence candle),2H-12H,none,1R,2932,1461,1468,49.9,-0.003,-0.355,0.074
+ALL,early (divergence candle),2H-12H,none,2R,2932,1046,1879,35.8,0.072,-0.281,0.083
+ALL,early (divergence candle),2H-12H,none,3R,2932,778,2145,26.6,0.062,-0.291,0.091
+ALL,early (divergence candle),2H-12H,EMA 200,1R,713,378,334,53.1,0.062,-0.261,0.125
+ALL,early (divergence candle),2H-12H,EMA 200,2R,713,294,415,41.5,0.244,-0.079,0.149
+ALL,early (divergence candle),2H-12H,EMA 200,3R,713,206,503,29.1,0.162,-0.161,0.169
+ALL,early (divergence candle),all timeframes,none,1R,46917,20201,26710,43.1,-0.163,-75.059,6.968
+ALL,early (divergence candle),all timeframes,none,2R,46917,14710,32189,31.4,-0.084,-75.0,6.97
+ALL,early (divergence candle),all timeframes,none,3R,46917,11618,35265,24.8,-0.034,-74.976,6.972
+ALL,early (divergence candle),all timeframes,EMA 200,1R,12609,5660,6948,44.9,-0.176,-73.094,13.393
+ALL,early (divergence candle),all timeframes,EMA 200,2R,12609,4122,8479,32.7,-0.095,-73.053,13.4
+ALL,early (divergence candle),all timeframes,EMA 200,3R,12609,3280,9318,26.0,-0.035,-73.01,13.404
+BTCUSDT,"confirmed, 1 candle",2H-12H,none,1R,722,382,340,52.9,0.058,-0.121,0.117
+BTCUSDT,"confirmed, 1 candle",2H-12H,none,2R,722,264,451,36.9,0.108,-0.073,0.14
+BTCUSDT,"confirmed, 1 candle",2H-12H,none,3R,722,200,515,28.0,0.119,-0.062,0.161
+BTCUSDT,"confirmed, 1 candle",2H-12H,EMA 200,1R,229,137,92,59.8,0.197,0.05,0.135
+BTCUSDT,"confirmed, 1 candle",2H-12H,EMA 200,2R,229,101,124,44.9,0.347,0.199,0.2
+BTCUSDT,"confirmed, 1 candle",2H-12H,EMA 200,3R,229,78,147,34.7,0.387,0.239,0.256
+BTCUSDT,"confirmed, 1 candle",all timeframes,none,1R,11316,5672,5641,50.1,0.003,-2.817,1.984
+BTCUSDT,"confirmed, 1 candle",all timeframes,none,2R,11316,3982,7322,35.2,0.057,-2.765,1.986
+BTCUSDT,"confirmed, 1 candle",all timeframes,none,3R,11316,3072,8225,27.2,0.088,-2.736,1.987
+BTCUSDT,"confirmed, 1 candle",all timeframes,EMA 200,1R,3559,1829,1730,51.4,0.028,-1.945,1.573
+BTCUSDT,"confirmed, 1 candle",all timeframes,EMA 200,2R,3559,1301,2253,36.6,0.098,-1.877,1.576
+BTCUSDT,"confirmed, 1 candle",all timeframes,EMA 200,3R,3559,998,2555,28.1,0.124,-1.852,1.576
+EURUSD,"confirmed, 1 candle",2H-12H,none,1R,529,291,236,55.2,0.104,-0.086,0.095
+EURUSD,"confirmed, 1 candle",2H-12H,none,2R,529,197,329,37.5,0.122,-0.068,0.132
+EURUSD,"confirmed, 1 candle",2H-12H,none,3R,529,154,372,29.3,0.17,-0.02,0.162
+EURUSD,"confirmed, 1 candle",2H-12H,EMA 200,1R,158,91,67,57.6,0.152,0.009,0.155
+EURUSD,"confirmed, 1 candle",2H-12H,EMA 200,2R,158,60,98,38.0,0.139,-0.004,0.227
+EURUSD,"confirmed, 1 candle",2H-12H,EMA 200,3R,158,43,115,27.2,0.089,-0.055,0.277
+EURUSD,"confirmed, 1 candle",all timeframes,none,1R,8639,4332,4303,50.2,0.001,-1.07,0.049
+EURUSD,"confirmed, 1 candle",all timeframes,none,2R,8639,2970,5657,34.4,0.029,-1.043,0.053
+EURUSD,"confirmed, 1 candle",all timeframes,none,3R,8639,2272,6348,26.4,0.049,-1.023,0.058
+EURUSD,"confirmed, 1 candle",all timeframes,EMA 200,1R,2769,1405,1364,50.7,0.011,-0.988,0.083
+EURUSD,"confirmed, 1 candle",all timeframes,EMA 200,2R,2769,960,1807,34.7,0.036,-0.963,0.091
+EURUSD,"confirmed, 1 candle",all timeframes,EMA 200,3R,2769,742,2023,26.8,0.065,-0.936,0.099
+XAUUSD,"confirmed, 1 candle",2H-12H,none,1R,472,239,230,51.0,0.019,-0.02,0.091
+XAUUSD,"confirmed, 1 candle",2H-12H,none,2R,472,160,305,34.4,0.032,-0.007,0.13
+XAUUSD,"confirmed, 1 candle",2H-12H,none,3R,472,135,329,29.1,0.164,0.125,0.166
+XAUUSD,"confirmed, 1 candle",2H-12H,EMA 200,1R,103,59,44,57.3,0.146,0.12,0.192
+XAUUSD,"confirmed, 1 candle",2H-12H,EMA 200,2R,103,46,57,44.7,0.34,0.314,0.289
+XAUUSD,"confirmed, 1 candle",2H-12H,EMA 200,3R,103,39,63,38.2,0.529,0.504,0.378
+XAUUSD,"confirmed, 1 candle",all timeframes,none,1R,7698,3750,3943,48.7,-0.034,-0.276,0.032
+XAUUSD,"confirmed, 1 candle",all timeframes,none,2R,7698,2602,5081,33.9,0.004,-0.238,0.039
+XAUUSD,"confirmed, 1 candle",all timeframes,none,3R,7698,2002,5676,26.1,0.027,-0.215,0.046
+XAUUSD,"confirmed, 1 candle",all timeframes,EMA 200,1R,2289,1157,1130,50.6,-0.011,-0.23,0.059
+XAUUSD,"confirmed, 1 candle",all timeframes,EMA 200,2R,2289,827,1458,36.2,0.057,-0.161,0.073
+XAUUSD,"confirmed, 1 candle",all timeframes,EMA 200,3R,2289,649,1633,28.4,0.103,-0.116,0.086
+ALL,"confirmed, 1 candle",2H-12H,none,1R,1723,912,806,53.1,0.061,-0.083,0.062
+ALL,"confirmed, 1 candle",2H-12H,none,2R,1723,621,1085,36.4,0.092,-0.053,0.08
+ALL,"confirmed, 1 candle",2H-12H,none,3R,1723,489,1216,28.7,0.147,0.002,0.095
+ALL,"confirmed, 1 candle",2H-12H,EMA 200,1R,490,287,203,58.6,0.171,0.051,0.09
+ALL,"confirmed, 1 candle",2H-12H,EMA 200,2R,490,207,279,42.6,0.278,0.158,0.134
+ALL,"confirmed, 1 candle",2H-12H,EMA 200,3R,490,160,325,33.0,0.32,0.199,0.17
+ALL,"confirmed, 1 candle",all timeframes,none,1R,27653,13754,13887,49.8,-0.008,-1.564,0.812
+ALL,"confirmed, 1 candle",all timeframes,none,2R,27653,9554,18060,34.6,0.033,-1.524,0.813
+ALL,"confirmed, 1 candle",all timeframes,none,3R,27653,7346,20249,26.6,0.059,-1.499,0.814
+ALL,"confirmed, 1 candle",all timeframes,EMA 200,1R,8617,4391,4224,51.0,0.012,-1.182,0.651
+ALL,"confirmed, 1 candle",all timeframes,EMA 200,2R,8617,3088,5518,35.9,0.067,-1.128,0.652
+ALL,"confirmed, 1 candle",all timeframes,EMA 200,3R,8617,2389,6211,27.8,0.099,-1.097,0.653
+BTCUSDT,"confirmed, 2 candles",2H-12H,none,1R,584,305,277,52.4,0.048,-0.044,0.081
+BTCUSDT,"confirmed, 2 candles",2H-12H,none,2R,584,211,368,36.4,0.093,0.001,0.118
+BTCUSDT,"confirmed, 2 candles",2H-12H,none,3R,584,162,416,28.0,0.121,0.028,0.146
+BTCUSDT,"confirmed, 2 candles",2H-12H,EMA 200,1R,202,116,84,58.0,0.16,0.058,0.137
+BTCUSDT,"confirmed, 2 candles",2H-12H,EMA 200,2R,202,84,114,42.4,0.273,0.171,0.207
+BTCUSDT,"confirmed, 2 candles",2H-12H,EMA 200,3R,202,65,133,32.8,0.313,0.211,0.261
+BTCUSDT,"confirmed, 2 candles",all timeframes,none,1R,9018,4574,4436,50.8,0.015,-1.41,0.997
+BTCUSDT,"confirmed, 2 candles",all timeframes,none,2R,9018,3199,5804,35.5,0.066,-1.36,0.998
+BTCUSDT,"confirmed, 2 candles",all timeframes,none,3R,9018,2441,6555,27.1,0.085,-1.342,0.999
+BTCUSDT,"confirmed, 2 candles",all timeframes,EMA 200,1R,3052,1578,1470,51.8,0.035,-0.785,0.155
+BTCUSDT,"confirmed, 2 candles",all timeframes,EMA 200,2R,3052,1115,1929,36.6,0.099,-0.723,0.159
+BTCUSDT,"confirmed, 2 candles",all timeframes,EMA 200,3R,3052,853,2189,28.0,0.122,-0.701,0.163
+EURUSD,"confirmed, 2 candles",2H-12H,none,1R,427,234,192,54.9,0.098,-0.056,0.1
+EURUSD,"confirmed, 2 candles",2H-12H,none,2R,427,169,257,39.7,0.189,0.036,0.142
+EURUSD,"confirmed, 2 candles",2H-12H,none,3R,427,141,284,33.2,0.326,0.172,0.181
+EURUSD,"confirmed, 2 candles",2H-12H,EMA 200,1R,142,71,71,50.0,0.0,-0.144,0.175
+EURUSD,"confirmed, 2 candles",2H-12H,EMA 200,2R,142,49,93,34.5,0.035,-0.109,0.242
+EURUSD,"confirmed, 2 candles",2H-12H,EMA 200,3R,142,36,106,25.4,0.014,-0.13,0.291
+EURUSD,"confirmed, 2 candles",all timeframes,none,1R,6704,3373,3326,50.4,0.006,-0.815,0.046
+EURUSD,"confirmed, 2 candles",all timeframes,none,2R,6704,2313,4379,34.6,0.034,-0.787,0.052
+EURUSD,"confirmed, 2 candles",all timeframes,none,3R,6704,1741,4943,26.0,0.037,-0.785,0.057
+EURUSD,"confirmed, 2 candles",all timeframes,EMA 200,1R,2313,1171,1142,50.6,0.011,-0.716,0.069
+EURUSD,"confirmed, 2 candles",all timeframes,EMA 200,2R,2313,800,1511,34.6,0.033,-0.695,0.08
+EURUSD,"confirmed, 2 candles",all timeframes,EMA 200,3R,2313,601,1707,26.0,0.035,-0.693,0.09
+XAUUSD,"confirmed, 2 candles",2H-12H,none,1R,388,194,189,50.7,0.013,-0.022,0.101
+XAUUSD,"confirmed, 2 candles",2H-12H,none,2R,388,137,242,36.1,0.084,0.05,0.146
+XAUUSD,"confirmed, 2 candles",2H-12H,none,3R,388,109,267,29.0,0.16,0.125,0.184
+XAUUSD,"confirmed, 2 candles",2H-12H,EMA 200,1R,103,56,46,54.9,0.098,0.075,0.194
+XAUUSD,"confirmed, 2 candles",2H-12H,EMA 200,2R,103,45,56,44.6,0.337,0.313,0.291
+XAUUSD,"confirmed, 2 candles",2H-12H,EMA 200,3R,103,32,67,32.3,0.293,0.269,0.369
+XAUUSD,"confirmed, 2 candles",all timeframes,none,1R,6031,2965,3056,49.2,-0.021,-0.19,0.029
+XAUUSD,"confirmed, 2 candles",all timeframes,none,2R,6031,2083,3929,34.6,0.029,-0.141,0.039
+XAUUSD,"confirmed, 2 candles",all timeframes,none,3R,6031,1600,4408,26.6,0.051,-0.118,0.047
+XAUUSD,"confirmed, 2 candles",all timeframes,EMA 200,1R,1907,970,933,51.0,0.011,-0.131,0.048
+XAUUSD,"confirmed, 2 candles",all timeframes,EMA 200,2R,1907,707,1192,37.2,0.099,-0.042,0.069
+XAUUSD,"confirmed, 2 candles",all timeframes,EMA 200,3R,1907,539,1357,28.4,0.11,-0.032,0.085
+ALL,"confirmed, 2 candles",2H-12H,none,1R,1399,733,658,52.7,0.054,-0.042,0.054
+ALL,"confirmed, 2 candles",2H-12H,none,2R,1399,517,867,37.4,0.12,0.025,0.077
+ALL,"confirmed, 2 candles",2H-12H,none,3R,1399,412,967,29.9,0.195,0.099,0.097
+ALL,"confirmed, 2 candles",2H-12H,EMA 200,1R,447,243,201,54.7,0.095,-0.003,0.095
+ALL,"confirmed, 2 candles",2H-12H,EMA 200,2R,447,178,263,40.4,0.211,0.113,0.139
+ALL,"confirmed, 2 candles",2H-12H,EMA 200,3R,447,133,306,30.3,0.212,0.114,0.173
+ALL,"confirmed, 2 candles",all timeframes,none,1R,21753,10912,10818,50.2,0.002,-0.888,0.414
+ALL,"confirmed, 2 candles",all timeframes,none,2R,21753,7595,14112,35.0,0.046,-0.846,0.415
+ALL,"confirmed, 2 candles",all timeframes,none,3R,21753,5782,15906,26.7,0.061,-0.831,0.415
+ALL,"confirmed, 2 candles",all timeframes,EMA 200,1R,7272,3719,3545,51.2,0.021,-0.592,0.07
+ALL,"confirmed, 2 candles",all timeframes,EMA 200,2R,7272,2622,4632,36.1,0.078,-0.536,0.074
+ALL,"confirmed, 2 candles",all timeframes,EMA 200,3R,7272,1993,5253,27.5,0.091,-0.523,0.078

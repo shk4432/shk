@@ -8,7 +8,7 @@ NA = float('nan')
 candles = None   # candle source: set by the caller, e.g. backtest.make_candles()
 
 P = dict(rsiLen=14, momLen=9, fastRsiLen=3, fastSmaLen=3, mode='CI', minDist=5, maxDist=40, pivL=5, pivR=2,
-         useClose=False, useRegular=True, useHidden=False, strictPx=True, strictOsc=False, validBars=20, needTF=3, syncOn=True, syncTol=1, groups='up')
+         useClose=False, early=True, useRegular=True, useHidden=False, strictPx=True, strictOsc=False, validBars=20, needTF=3, syncOn=True, syncTol=1, groups='up')
 
 LADDER = [('5', '5m'), ('10', '10m'), ('15', '15m'), ('30', '30m'), ('60', '1H'), ('120', '2H'), ('180', '3H'), ('240', '4H'),
           ('360', '6H'), ('480', '8H'), ('600', '10H'), ('720', '12H'), ('1D', '1D'), ('2D', '2D'), ('3D', '3D'),
@@ -127,16 +127,26 @@ def scan(bars, p=P):
     pl = pivots(lo, p['pivL'], p['pivR'], True)
     ph = pivots(hi, p['pivL'], p['pivR'], False)
     R = p['pivR']
+    L = p['pivL']
+    early = p.get('early', False)
+    # early timing: the candle is the low (high) of itself and the L candles before it
+    new_low = [early and i >= L and lo[i] <= min(lo[i - L:i]) for i in range(len(bars))]
+    new_high = [early and i >= L and hi[i] >= max(hi[i - L:i]) for i in range(len(bars))]
+    off = 0 if early else R
     life = max(p['validBars'], R + 1)
     st = {s: dict(on=False, b2=None, t1=None, p1=None, t2=None, p2=None, osc=0, hid=False) for s in ('bu', 'be')}
     piv = {'bu': [], 'be': []}  # newest first: (bar, time, price, rsi, ci)
     out = []
     for i in range(len(bars)):
         for side, pv, px in (('bu', pl, lo), ('be', ph, hi)):
-            if math.isnan(pv[i]):
-                continue
             isBull = side == 'bu'
-            b2 = i - R; t2 = bars[b2]['ot']; p2 = pv[i]; r2 = r[b2]; c2 = ci[b2]
+            cand = (new_low[i] if isBull else new_high[i]) if early else not math.isnan(pv[i])
+            if not cand:
+                if not math.isnan(pv[i]):   # confirmed swing points are the first-swing candidates
+                    piv[side].insert(0, (i - R, bars[i - R]['ot'], pv[i], r[i - R], ci[i - R]))
+                    del piv[side][p['maxDist'] + 1:]
+                continue
+            b2 = i - off; t2 = bars[b2]['ot']; p2 = px[b2]; r2 = r[b2]; c2 = ci[b2]
             match = None
             if not (math.isnan(r2) or math.isnan(c2)):
                 for (b1, t1, p1, r1, c1) in piv[side]:
@@ -164,8 +174,9 @@ def scan(bars, p=P):
                 s.update(on=True, b2=b2, t1=match[0], p1=match[1], t2=t2, p2=p2, osc=match[2], hid=match[3])
             elif s['on'] and ((p2 < s['p2']) if isBull else (p2 > s['p2'])):
                 s['on'] = False
-            piv[side].insert(0, (b2, t2, p2, r2, c2))
-            del piv[side][p['maxDist'] + 1:]
+            if not math.isnan(pv[i]):
+                piv[side].insert(0, (i - R, bars[i - R]['ot'], pv[i], r[i - R], ci[i - R]))
+                del piv[side][p['maxDist'] + 1:]
         for side in ('bu', 'be'):
             s = st[side]
             if s['on'] and (i - s['b2'] > life or ((c[i] < s['p2']) if side == 'bu' else (c[i] > s['p2']))):
@@ -187,7 +198,8 @@ def mtf(chart_tf, t_from, t_to, ladder=LADDER, p=P, buf_days=30, enabled=None):
     per_tf = []
     for tf, nm in lad:
         bars = candles(tf, t_from - buf_days * DAY, t_to)
-        sh = shifted(scan(bars, p))
+        raw = scan(bars, p)
+        sh = shifted(raw) if (tf_seconds(tf) > csec or p.get('shiftAll')) else raw
         lower = tf_seconds(tf) < csec
         vals = []
         j = 0

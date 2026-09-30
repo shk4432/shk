@@ -166,6 +166,7 @@ def ema(bars, n=EMA_LEN):
 def signals(candles, t0, t1, mode):
     ref.candles = candles
     p = dict(ref.P)
+    p.update(early=False, shiftAll=True)   # settings of the 3-timeframe study
     need = p['needTF']
     groups = [NAMES[j:j + need] for j in range(len(NAMES) - need + 1)]
     runs = [('5', None)] if mode == 'A' else [(TF_OF[g[0]], g) for g in groups]
