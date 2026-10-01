@@ -3,6 +3,7 @@
 Every new divergence on any of the 19 timeframes is a trade: bullish = long, bearish = short.
   timing : 'early' = the candle that forms the divergence; 'conf' = after pivR confirmation candles
   swings : 'hl' = swing points on the candle highs/lows (default), 'close' = on the closes
+  osc    : 'ci' = divergence with Mega RSI (default), 'both' = with RSI and Mega RSI at the same time
   entry  : close of the first 5m candle on which the divergence is visible (alert moment)
   stop   : low (long) / high (short) of that timeframe's candle of divergence point 2 (also with 'close')
   targets: 1R, 2R, 3R, each on its own; no time limit - a trade ends only at target or stop
@@ -18,9 +19,9 @@ from backtest import ref, MARKET, COST_SIDE, DAY, MIN, TF_OF
 NO_LIMIT = 10 ** 15
 
 
-def signals(candles, t0, t1, early, pivR=2, use_close=False):
+def signals(candles, t0, t1, early, pivR=2, use_close=False, mode='CI'):
     ref.candles = candles
-    P = dict(ref.P); P['early'] = early; P['pivR'] = pivR; P['useClose'] = use_close
+    P = dict(ref.P); P['early'] = early; P['pivR'] = pivR; P['useClose'] = use_close; P['mode'] = mode
     chart, per_tf, _ = ref.mtf('5', t0, t1, p=P, buf_days=4000)
     sigs = []
     for tf, nm, sec, vals in per_tf:
@@ -73,7 +74,7 @@ def simulate(sig, bars5, times5, cost_side):
     return dict(R=R, riskPct=R / E * 100, out=out, cost=cost, mfe=mfe, exit_t=exit_t)
 
 
-def run(sym, timing, pivR=2, swings='hl'):
+def run(sym, timing, pivR=2, swings='hl', osc='ci'):
     early = timing == 'early'
     market = MARKET[sym]
     if market == 'crypto':
@@ -88,7 +89,7 @@ def run(sym, timing, pivR=2, swings='hl'):
     times5 = [b[0] for b in base5]
     ix = bt2.TFIndex(candles)
     trades = []
-    for s in signals(candles, t0, t1, early, pivR, swings == 'close'):
+    for s in signals(candles, t0, t1, early, pivR, swings == 'close', 'BOTH' if osc == 'both' else 'CI'):
         if not (t0 <= s['t'] <= t1 + 5 * MIN):
             continue
         # the chart's own timeframe (5m) is read from the current candle, higher ones from the last closed candle
@@ -98,11 +99,11 @@ def run(sym, timing, pivR=2, swings='hl'):
         r = simulate(s, base5, times5, COST_SIDE[market])
         s.update(sym=sym, market=market, **r)
         trades.append(s)
-    pickle.dump(dict(trades=trades, t0=t0, t1=t1, last=base5[-1][0]), open(f'{HERE}/data/trades_tf_{timing}{pivR}{"c" if swings == "close" else ""}_{sym}.pkl', 'wb'))
+    pickle.dump(dict(trades=trades, t0=t0, t1=t1, last=base5[-1][0]), open(f'{HERE}/data/trades_tf_{timing}{pivR}{"c" if swings == "close" else ""}{"b" if osc == "both" else ""}_{sym}.pkl', 'wb'))
     print(sym, 'signals', len(trades), dt.datetime.utcfromtimestamp(t0 / 1000).date(), '->', dt.datetime.utcfromtimestamp(t1 / 1000).date(), flush=True)
 
 
 if __name__ == '__main__':
-    # python3 backtest_timeframes.py BTCUSDT early|conf [pivR] [hl|close]
+    # python3 backtest_timeframes.py BTCUSDT early|conf [pivR] [hl|close] [ci|both]
     run(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else 'early', int(sys.argv[3]) if len(sys.argv) > 3 else 2,
-        sys.argv[4] if len(sys.argv) > 4 else 'hl')
+        sys.argv[4] if len(sys.argv) > 4 else 'hl', sys.argv[5] if len(sys.argv) > 5 else 'ci')
