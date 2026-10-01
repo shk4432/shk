@@ -7,7 +7,7 @@ Every new divergence on any of the 19 timeframes is a trade: bullish = long, bea
   targets: 1R, 2R, 3R, each on its own; no time limit - a trade ends only at target or stop
            (still open at the end of the data = 'open')
   filter : none, or EMA 200 of the divergence's own timeframe (last closed candle), as in the indicator;
-           the ADX (14, 14) of that timeframe at the same moment is stored for the ADX > 20 filter
+           the Auto AVWAP High/Low lines of that timeframe at the same moment are stored for the AVWAP filter
 """
 import sys, os, pickle, datetime as dt
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -93,7 +93,7 @@ def run(sym, timing, pivR=2):
         # the chart's own timeframe (5m) is read from the current candle, higher ones from the last closed candle
         at = s['t'] if s['tf'] == '5m' else s['ot']
         s['ema'] = ix.ema_at(TF_OF[s['tf']], at)
-        s['adx'] = ix.adx_at(TF_OF[s['tf']], at)
+        s['avwap_hi'], s['avwap_lo'] = ix.avwap_at(TF_OF[s['tf']], at)
         r = simulate(s, base5, times5, COST_SIDE[market])
         s.update(sym=sym, market=market, **r)
         trades.append(s)

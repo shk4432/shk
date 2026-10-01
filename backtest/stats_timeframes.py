@@ -10,22 +10,27 @@ def load(sym):
     return pickle.load(open(f'{HERE}/data/trades_tf_{RUN}_{sym}.pkl', 'rb'))['trades']
 
 
-ADX_MIN = 20   # ADX filter: trade only when the ADX of the divergence's timeframe is above this
-FILTERS = ('none', 'ema', 'adx', 'ema+adx')
+FILTERS = ('none', 'ema', 'avwap', 'ema+avwap')
 
 
-def passes(t, f, adx_min=ADX_MIN):
-    """f: 'none', 'ema' (long above / short below EMA 200), 'adx' (ADX > adx_min) or 'ema+adx'."""
+def passes(t, f):
+    """f: 'none'; 'ema' = long above / short below EMA 200; 'avwap' = long above the AVWAP Low line (green),
+    short below the High line (red); 'avwap_g' = long above / short below the Low line (green);
+    'ema+avwap', 'ema+avwap_g' = both conditions."""
     if f == 'none':
         return True
-    if f == 'ema+adx':
-        return passes(t, 'ema') and passes(t, 'adx', adx_min)
-    if f == 'adx':
-        return t.get('adx') is not None and t['adx'] > adx_min
+    if f.startswith('ema+'):
+        return passes(t, 'ema') and passes(t, f[4:])
+    long = t['side'] == 'bu'
+    if f in ('avwap', 'avwap_g'):
+        line = t.get('avwap_lo') if long or f == 'avwap_g' else t.get('avwap_hi')
+        if line is None:
+            return False
+        return t['entry'] > line if long else t['entry'] < line
     e = t.get('ema')
     if e is None:
         return False
-    return t['entry'] > e if t['side'] == 'bu' else t['entry'] < e
+    return t['entry'] > e if long else t['entry'] < e
 
 
 def agg(trs, k, net):

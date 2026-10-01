@@ -21,8 +21,6 @@ NAMES = [nm for _, nm in LADDER]
 TF_OF = {nm: tf for tf, nm in LADDER}
 TIME_LIMIT = 20
 EMA_LEN = 200
-ADX_DI_LEN = 14   # ADX filter: DI length and ADX smoothing of TradingView's built-in ADX
-ADX_LEN = 14
 MARKET = {'BTCUSDT': 'crypto', 'ETHUSDT': 'crypto', 'SOLUSDT': 'crypto', 'ZECUSDT': 'crypto', 'HYPEUSDT': 'crypto',
           'EURUSD': 'fx', 'GBPUSD': 'fx', 'XAUUSD': 'fx', 'SPXUSD': 'rth', 'NSXUSD': 'rth'}
 COST_SIDE = {'crypto': 0.0005, 'fx': 0.0001, 'rth': 0.0001}
@@ -71,15 +69,17 @@ def load_crypto(sym):
         if tf not in cache:
             src = kd if tf[-1] in 'DWM' else k5
             out = []
-            for (t, o, h, l, c) in src:
+            for row in src:
+                t, o, h, l, c = row[:5]
+                v = row[5] if len(row) > 5 else 0.0
                 bo, bc = ref.bucket(t, tf)
                 if out and out[-1]['ot'] == bo:
-                    x = out[-1]; x['h'] = max(x['h'], h); x['l'] = min(x['l'], l); x['c'] = c
+                    x = out[-1]; x['h'] = max(x['h'], h); x['l'] = min(x['l'], l); x['c'] = c; x['v'] += v
                 else:
-                    out.append(dict(ot=bo, ct=bc, o=o, h=h, l=l, c=c))
+                    out.append(dict(ot=bo, ct=bc, o=o, h=h, l=l, c=c, v=v))
             cache[tf] = out
         return _clip(cache[tf], t_from, t_to)
-    return candles, k5
+    return candles, [tuple(r[:5]) for r in k5]
 
 
 def _clip(out, t_from, t_to):
@@ -111,18 +111,42 @@ def load_session(sym, market, base_from):
             else:
                 base5.append([b, o, h, l, c])
     base5 = [tuple(x) for x in base5]
+    # volume: histdata has none, so Dukascopy volumes are added by time (fetch_dukascopy_volume.py):
+    # hourly volumes for the daily and higher candles, 1-minute volumes for the intraday ones
+    vol5, vol_day = {}, {}
+    for name, into_day in (('vol1h', True), ('vol1m', False)):
+        vpath = f'{HERE}/data/{sym}-{name}.json'
+        if not os.path.exists(vpath):
+            continue
+        for (t, v, _) in json.load(open(vpath)):
+            s = session(t, market)
+            if s is None or (market == 'fx' and weekday(s[2]) >= 5):
+                continue
+            if into_day:
+                vol_day[s[2]] = vol_day.get(s[2], 0.0) + v
+            elif t >= base_from:
+                b = t // (5 * MIN) * (5 * MIN)
+                vol5[b] = vol5.get(b, 0.0) + v
+    for d in daily:
+        d['v'] = vol_day.get(d['k'], 0.0)
     cache = {}
 
     def intraday(minutes):
         dur = minutes * MIN
-        out = []
+        out, at = [], {}
         for (t, o, h, l, c) in base5:
             ss, se, k = session(t, market)
             bo = ss + (t - ss) // dur * dur
             if out and out[-1]['ot'] == bo:
                 x = out[-1]; x['h'] = max(x['h'], h); x['l'] = min(x['l'], l); x['c'] = c
             else:
-                out.append(dict(ot=bo, ct=min(bo + dur, se), o=o, h=h, l=l, c=c))
+                out.append(dict(ot=bo, ct=min(bo + dur, se), o=o, h=h, l=l, c=c, v=0.0))
+                at[bo] = out[-1]
+        for t, v in vol5.items():
+            ss, se, k = session(t, market)
+            x = at.get(ss + (t - ss) // dur * dur)
+            if x is not None:
+                x['v'] += v
         return out
 
     def grouped(tf):
@@ -137,9 +161,9 @@ def load_session(sym, market, base_from):
                 y = dt.date(1970, 1, 1) + dt.timedelta(days=d['k'])
                 key = (y.year * 12 + y.month - 1) // n
             if out and key == last:
-                x = out[-1]; x['h'] = max(x['h'], d['h']); x['l'] = min(x['l'], d['l']); x['c'] = d['c']; x['ct'] = d['ct']
+                x = out[-1]; x['h'] = max(x['h'], d['h']); x['l'] = min(x['l'], d['l']); x['c'] = d['c']; x['ct'] = d['ct']; x['v'] += d['v']
             else:
-                out.append(dict(ot=d['ot'], ct=d['ct'], o=d['o'], h=d['h'], l=d['l'], c=d['c']))
+                out.append(dict(ot=d['ot'], ct=d['ct'], o=d['o'], h=d['h'], l=d['l'], c=d['c'], v=d['v']))
                 last = key
         return out
 
@@ -181,28 +205,91 @@ def rma(vals, n):
     return out
 
 
-def adx(bars, di_len=ADX_DI_LEN, adx_len=ADX_LEN):
-    """ADX as TradingView's built-in 'ADX' / ta.dmi(di_len, adx_len): Wilder (RMA) smoothing of TR, +DM, -DM and DX."""
+def _window(vals, i, n):
+    w = vals[i - n + 1:i + 1] if i >= n - 1 else None
+    return w if w and all(v is not None for v in w) else None
+
+
+def sma(vals, n):
+    out = [None] * len(vals)
+    for i in range(len(vals)):
+        w = _window(vals, i, n)
+        if w:
+            out[i] = sum(w) / n
+    return out
+
+
+def wma(vals, n):
+    out, den = [None] * len(vals), n * (n + 1) / 2
+    for i in range(len(vals)):
+        w = _window(vals, i, n)
+        if w:
+            out[i] = sum(v * (j + 1) for j, v in enumerate(w)) / den
+    return out
+
+
+def rsi(vals, n):
+    """ta.rsi: RMA of gains / losses; 100 when there are no losses, 0 when there are no gains."""
+    up = [None] + [max(vals[i] - vals[i - 1], 0.0) for i in range(1, len(vals))]
+    dn = [None] + [max(vals[i - 1] - vals[i], 0.0) for i in range(1, len(vals))]
+    ru, rd = rma(up, n), rma(dn, n)
+    out = [None] * len(vals)
+    for i in range(len(vals)):
+        if ru[i] is None or rd[i] is None:
+            continue
+        out[i] = 100.0 if rd[i] == 0 else 0.0 if ru[i] == 0 else 100 - 100 / (1 + ru[i] / rd[i])
+    return out
+
+
+def stoch(vals, n):
+    """ta.stoch(x, x, x, n): position of x inside its own n-candle range, 0..100."""
+    out = [None] * len(vals)
+    for i in range(len(vals)):
+        w = _window(vals, i, n)
+        if w and max(w) != min(w):
+            out[i] = 100 * (vals[i] - min(w)) / (max(w) - min(w))
+    return out
+
+
+def avwap(bars, rsi_len=64, stoch_len=48, smooth_k=4, smooth_d=4, lower=20, upper=80, lower_rev=20, upper_rev=80):
+    """Electrified "Auto AVWAP (Anchored-VWAP)" with its default inputs (High/Low, WMA K, HLC3 source).
+    Returns the High line (red) and the Low line (green) per candle; the anchors move with the script's
+    Stochastic-RSI state machine, run from the first candle like on a chart."""
     n = len(bars)
-    tr, pdm, mdm = [None] * n, [None] * n, [None] * n
-    for i in range(1, n):
-        h, l, pc = bars[i]['h'], bars[i]['l'], bars[i - 1]['c']
-        tr[i] = max(h - l, abs(h - pc), abs(l - pc))
-        up, down = h - bars[i - 1]['h'], bars[i - 1]['l'] - l
-        pdm[i] = up if (up > down and up > 0) else 0.0
-        mdm[i] = down if (down > up and down > 0) else 0.0
-    trr, pr, mr = rma(tr, di_len), rma(pdm, di_len), rma(mdm, di_len)
-    dx, plus, minus = [None] * n, None, None
-    for i in range(n):
-        if trr[i] is None:
-            continue
-        if trr[i] != 0:                     # fixnan(): a zero true range keeps the previous +DI / -DI
-            plus, minus = 100 * pr[i] / trr[i], 100 * mr[i] / trr[i]
-        if plus is None:
-            continue
-        s = plus + minus
-        dx[i] = abs(plus - minus) / (s if s != 0 else 1)
-    return [None if v is None else 100 * v for v in rma(dx, adx_len)]
+    src = [(b['h'] + b['l'] + b['c']) / 3 for b in bars]
+    k = wma(stoch(rsi(src, rsi_len), stoch_len), smooth_k)
+    d = sma(k, smooth_d)
+    hi_line, lo_line = [None] * n, [None] * n
+    if not n:
+        return hi_line, lo_line
+    hi = phi = bars[0]['h']
+    lo = plo = bars[0]['l']
+    state = 0
+    hs = ls = hv = lv = hsn = lsn = hvn = lvn = 0.0
+    lt = lambda x, y: x is not None and y is not None and x < y
+    for i, b in enumerate(bars):
+        h, l, v, di, ki = b['h'], b['l'], b.get('v', 0.0), d[i], k[i]
+        if lt(di, lower) or h > phi:
+            phi = h; hsn = hvn = 0.0
+        if lt(upper, di) or l < plo:
+            plo = l; lsn = lvn = 0.0
+        if h > hi:
+            hi = h; hs = hv = 0.0
+        if l < lo:
+            lo = l; ls = lv = 0.0
+        hs += h * v; ls += l * v; hv += v; lv += v
+        hsn += h * v; lsn += l * v; hvn += v; lvn += v
+        if state != -1 and lt(di, lower):
+            state = -1
+        elif state != 1 and lt(upper, di):
+            state = 1
+        if hi > phi and state == 1 and lt(ki, di) and lt(ki, lower_rev):
+            hi = phi; hs, hv = hsn, hvn
+        if lo < plo and state == -1 and lt(di, ki) and lt(upper_rev, ki):
+            lo = plo; ls, lv = lsn, lvn
+        hi_line[i] = hs / hv if hv else None
+        lo_line[i] = ls / lv if lv else None
+    return hi_line, lo_line
 
 
 # ── signals and trades ────────────────────────────────────────────────────
@@ -240,13 +327,13 @@ class TFIndex:
         bars, ots, cts, e = self.get(tf)
         i = bisect.bisect_right(cts, t) - 1
         return e[i] if i >= 0 else None
-    def adx_at(self, tf, t):
-        """ADX of the last candle of `tf` that closed at or before t."""
-        if ('adx', tf) not in self.c:
-            self.c[('adx', tf)] = adx(self.get(tf)[0])
-        cts, a = self.get(tf)[2], self.c[('adx', tf)]
+    def avwap_at(self, tf, t):
+        """(High line, Low line) of the Auto AVWAP on the last candle of `tf` that closed at or before t."""
+        if ('avwap', tf) not in self.c:
+            self.c[('avwap', tf)] = avwap(self.get(tf)[0])
+        cts, (hl, ll) = self.get(tf)[2], self.c[('avwap', tf)]
         i = bisect.bisect_right(cts, t) - 1
-        return a[i] if i >= 0 else None
+        return (hl[i], ll[i]) if i >= 0 else (None, None)
     def limit(self, tf, t):
         bars, ots, cts, _ = self.get(tf)
         i = max(bisect.bisect_right(ots, t) - 1, 0)

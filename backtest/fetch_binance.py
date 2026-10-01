@@ -1,4 +1,4 @@
-"""Download Binance 5m (last ~14 months) and 1d (full history) klines from data.binance.vision."""
+"""Download Binance 5m (last ~14 months) and 1d (full history) klines from data.binance.vision: [time, o, h, l, c, volume]."""
 import io, os, sys, zipfile, csv, json, urllib.request, datetime as dt
 OUT = os.path.dirname(os.path.abspath(__file__)) + '/data'
 os.makedirs(OUT, exist_ok=True)
@@ -27,7 +27,7 @@ def rows(blob):
         t = int(line[0])
         if t > 10**14:          # spot files switched to microseconds in 2025
             t //= 1000
-        out.append((t, float(line[1]), float(line[2]), float(line[3]), float(line[4])))
+        out.append((t, float(line[1]), float(line[2]), float(line[3]), float(line[4]), float(line[5])))   # + base-asset volume
     return out
 
 def months(a, b):
