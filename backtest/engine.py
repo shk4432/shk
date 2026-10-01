@@ -134,7 +134,7 @@ def scan(bars, p=P):
     new_high = [early and i >= L and hi[i] >= max(hi[i - L:i]) for i in range(len(bars))]
     off = 0 if early else R
     life = max(p['validBars'], R + 1)
-    st = {s: dict(on=False, b2=None, t1=None, p1=None, t2=None, p2=None, osc=0, hid=False) for s in ('bu', 'be')}
+    st = {s: dict(on=False, b2=None, t1=None, p1=None, t2=None, p2=None, sl=None, osc=0, hid=False) for s in ('bu', 'be')}
     piv = {'bu': [], 'be': []}  # newest first: (bar, time, price, rsi, ci)
     out = []
     for i in range(len(bars)):
@@ -171,7 +171,8 @@ def scan(bars, p=P):
                             break
             s = st[side]
             if match:
-                s.update(on=True, b2=b2, t1=match[0], p1=match[1], t2=t2, p2=p2, osc=match[2], hid=match[3])
+                # sl: low (bullish) / high (bearish) of the candle of point 2, also when the swing points use the close
+                s.update(on=True, b2=b2, t1=match[0], p1=match[1], t2=t2, p2=p2, sl=bars[b2]['l'] if isBull else bars[b2]['h'], osc=match[2], hid=match[3])
             elif s['on'] and ((p2 < s['p2']) if isBull else (p2 > s['p2'])):
                 s['on'] = False
             if not math.isnan(pv[i]):
@@ -186,7 +187,7 @@ def scan(bars, p=P):
 
 
 def shifted(states):
-    off = dict(on=False, b2=None, t1=None, p1=None, t2=None, p2=None, osc=0, hid=False, age=None)
+    off = dict(on=False, b2=None, t1=None, p1=None, t2=None, p2=None, sl=None, osc=0, hid=False, age=None)
     return [{'bu': off, 'be': off}] + states[:-1]
 
 
@@ -219,7 +220,7 @@ def mtf(chart_tf, t_from, t_to, ladder=LADDER, p=P, buf_days=30, enabled=None):
                 ok = bars and bars[j]['ot'] <= cb['ot'] < bars[j]['ct']
                 vals.append(sh[j] if ok else None)
         # hold the last known state when a chart bar has no data for this TF (or no divergence yet)
-        off = dict(on=False, b2=None, t1=None, p1=None, t2=None, p2=None, osc=0, hid=False, age=None)
+        off = dict(on=False, b2=None, t1=None, p1=None, t2=None, p2=None, sl=None, osc=0, hid=False, age=None)
         held = {'bu': off, 'be': off}; hv = []
         for v in vals:
             for side in ('bu', 'be'):
