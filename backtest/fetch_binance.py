@@ -54,6 +54,7 @@ def fetch(sym, market, interval, start):
     json.dump(out, open(f'{OUT}/{sym}-{interval}.json', 'w'))
     print(sym, interval, len(out), dt.datetime.utcfromtimestamp(out[0][0]/1000) if out else None, dt.datetime.utcfromtimestamp(out[-1][0]/1000) if out else None, flush=True)
 
+# python3 fetch_binance.py BTCUSDT [5m start, default 2025-01-01]
 sym = sys.argv[1]
 fetch(sym, SYMS[sym], '1d', dt.date(2017, 1, 1))
-fetch(sym, SYMS[sym], '5m', dt.date(2025, 1, 1))
+fetch(sym, SYMS[sym], '5m', dt.date.fromisoformat(sys.argv[2]) if len(sys.argv) > 2 else dt.date(2025, 1, 1))

@@ -93,6 +93,22 @@ def _clip(out, t_from, t_to):
 def load_session(sym, market, base_from):
     m1 = json.load(open(f'{HERE}/data/{sym}-1m.json'))
     base5, daily = [], []
+    # older daily history from Dukascopy hours (fetch_dukascopy_hours.py), up to the first histdata minute
+    hpath = f'{HERE}/data/{sym}-1h.json'
+    if os.path.exists(hpath) and m1:
+        for (t, o, h, l, c, v) in json.load(open(hpath)):
+            if t >= m1[0][0]:
+                break
+            s = session(t, market)
+            if s is None:
+                continue
+            ss, se, k = s
+            if market == 'fx' and weekday(k) >= 5:
+                continue
+            if daily and daily[-1]['k'] == k:
+                x = daily[-1]; x['h'] = max(x['h'], h); x['l'] = min(x['l'], l); x['c'] = c; x['v'] += v
+            else:
+                daily.append(dict(ot=ss, ct=se, o=o, h=h, l=l, c=c, k=k, v=v))
     for (t, o, h, l, c) in m1:
         s = session(t, market)
         if s is None:
@@ -103,7 +119,7 @@ def load_session(sym, market, base_from):
         if daily and daily[-1]['k'] == k:
             x = daily[-1]; x['h'] = max(x['h'], h); x['l'] = min(x['l'], l); x['c'] = c
         else:
-            daily.append(dict(ot=ss, ct=se, o=o, h=h, l=l, c=c, k=k))
+            daily.append(dict(ot=ss, ct=se, o=o, h=h, l=l, c=c, k=k, v=0.0))
         if t >= base_from:
             b = t // (5 * MIN) * (5 * MIN)
             if base5 and base5[-1][0] == b:
@@ -128,7 +144,7 @@ def load_session(sym, market, base_from):
                 b = t // (5 * MIN) * (5 * MIN)
                 vol5[b] = vol5.get(b, 0.0) + v
     for d in daily:
-        d['v'] = vol_day.get(d['k'], 0.0)
+        d['v'] = vol_day.get(d['k'], d['v'])
     cache = {}
 
     def intraday(minutes):

@@ -32,6 +32,8 @@ def signals(candles, t0, t1, early, pivR=2, use_close=False, mode='CI'):
                 st = v[side]
                 if st['on'] and fired[side] != st['t2']:
                     fired[side] = st['t2']
+                    if ci == 0:
+                        continue        # already active before the test window: signalled earlier, not a new signal
                     sigs.append(dict(tf=nm, side=side, ot=cb['ot'], t=cb['ct'], entry=cb['c'], stop=st['sl'],
                                      t2=st['t2'], osc=st['osc'], limit=NO_LIMIT))
     return sigs
@@ -74,17 +76,25 @@ def simulate(sig, bars5, times5, cost_side):
     return dict(R=R, riskPct=R / E * 100, out=out, cost=cost, mfe=mfe, exit_t=exit_t)
 
 
-def run(sym, timing, pivR=2, swings='hl', osc='ci'):
+def years_before(ms, years):
+    """The same calendar moment `years` years earlier."""
+    d = dt.datetime.fromtimestamp(ms / 1000, dt.timezone.utc)
+    return int(d.replace(year=d.year - years).timestamp() * 1000)
+
+
+def run(sym, timing, pivR=2, swings='hl', osc='ci', years=1):
     early = timing == 'early'
     market = MARKET[sym]
     if market == 'crypto':
         candles, base5 = bt2.load_crypto(sym)
-        t0 = int(dt.datetime(2025, 9, 30, tzinfo=dt.timezone.utc).timestamp() * 1000)
         t1 = int(dt.datetime(2026, 9, 29, 23, 55, tzinfo=dt.timezone.utc).timestamp() * 1000)
+        t0 = int(dt.datetime(2026 - years, 9, 30, tzinfo=dt.timezone.utc).timestamp() * 1000)
     else:
-        candles, base5 = bt2.load_session(sym, market, int(dt.datetime(2025, 1, 1, tzinfo=dt.timezone.utc).timestamp() * 1000))
+        # 5m candles from about 9 months before the test, so every intraday timeframe is warmed up
+        base_from = dt.datetime(2025, 1, 1, tzinfo=dt.timezone.utc) if years == 1 else dt.datetime(2026 - years - 1, 1, 1, tzinfo=dt.timezone.utc)
+        candles, base5 = bt2.load_session(sym, market, int(base_from.timestamp() * 1000))
         t1 = base5[-1][0]
-        t0 = t1 - 365 * DAY
+        t0 = years_before(t1, years)
     base5 = [tuple(b) for b in base5]
     times5 = [b[0] for b in base5]
     ix = bt2.TFIndex(candles)
@@ -99,11 +109,11 @@ def run(sym, timing, pivR=2, swings='hl', osc='ci'):
         r = simulate(s, base5, times5, COST_SIDE[market])
         s.update(sym=sym, market=market, **r)
         trades.append(s)
-    pickle.dump(dict(trades=trades, t0=t0, t1=t1, last=base5[-1][0]), open(f'{HERE}/data/trades_tf_{timing}{pivR}{"c" if swings == "close" else ""}{"b" if osc == "both" else ""}_{sym}.pkl', 'wb'))
+    pickle.dump(dict(trades=trades, t0=t0, t1=t1, last=base5[-1][0]), open(f'{HERE}/data/trades_tf_{timing}{pivR}{"c" if swings == "close" else ""}{"b" if osc == "both" else ""}{f"_{years}y" if years > 1 else ""}_{sym}.pkl', 'wb'))
     print(sym, 'signals', len(trades), dt.datetime.utcfromtimestamp(t0 / 1000).date(), '->', dt.datetime.utcfromtimestamp(t1 / 1000).date(), flush=True)
 
 
 if __name__ == '__main__':
-    # python3 backtest_timeframes.py BTCUSDT early|conf [pivR] [hl|close] [ci|both]
+    # python3 backtest_timeframes.py BTCUSDT early|conf [pivR] [hl|close] [ci|both] [years]
     run(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else 'early', int(sys.argv[3]) if len(sys.argv) > 3 else 2,
-        sys.argv[4] if len(sys.argv) > 4 else 'hl', sys.argv[5] if len(sys.argv) > 5 else 'ci')
+        sys.argv[4] if len(sys.argv) > 4 else 'hl', sys.argv[5] if len(sys.argv) > 5 else 'ci', int(sys.argv[6]) if len(sys.argv) > 6 else 1)
