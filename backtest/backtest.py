@@ -21,6 +21,8 @@ NAMES = [nm for _, nm in LADDER]
 TF_OF = {nm: tf for tf, nm in LADDER}
 TIME_LIMIT = 20
 EMA_LEN = 200
+ADX_DI_LEN = 14   # ADX filter: DI length and ADX smoothing of TradingView's built-in ADX
+ADX_LEN = 14
 MARKET = {'BTCUSDT': 'crypto', 'ETHUSDT': 'crypto', 'SOLUSDT': 'crypto', 'ZECUSDT': 'crypto', 'HYPEUSDT': 'crypto',
           'EURUSD': 'fx', 'GBPUSD': 'fx', 'XAUUSD': 'fx', 'SPXUSD': 'rth', 'NSXUSD': 'rth'}
 COST_SIDE = {'crypto': 0.0005, 'fx': 0.0001, 'rth': 0.0001}
@@ -162,6 +164,47 @@ def ema(bars, n=EMA_LEN):
     return out
 
 
+def rma(vals, n):
+    """ta.rma: seeded with the SMA of the first n values, then alpha = 1/n. None until then (and for missing inputs)."""
+    out, r, buf = [None] * len(vals), None, []
+    for i, v in enumerate(vals):
+        if r is None:
+            if v is None:
+                buf = []
+                continue
+            buf.append(v)
+            if len(buf) == n:
+                r = sum(buf) / n; out[i] = r
+            continue
+        r = (v + (n - 1) * r) / n if v is not None else r
+        out[i] = r
+    return out
+
+
+def adx(bars, di_len=ADX_DI_LEN, adx_len=ADX_LEN):
+    """ADX as TradingView's built-in 'ADX' / ta.dmi(di_len, adx_len): Wilder (RMA) smoothing of TR, +DM, -DM and DX."""
+    n = len(bars)
+    tr, pdm, mdm = [None] * n, [None] * n, [None] * n
+    for i in range(1, n):
+        h, l, pc = bars[i]['h'], bars[i]['l'], bars[i - 1]['c']
+        tr[i] = max(h - l, abs(h - pc), abs(l - pc))
+        up, down = h - bars[i - 1]['h'], bars[i - 1]['l'] - l
+        pdm[i] = up if (up > down and up > 0) else 0.0
+        mdm[i] = down if (down > up and down > 0) else 0.0
+    trr, pr, mr = rma(tr, di_len), rma(pdm, di_len), rma(mdm, di_len)
+    dx, plus, minus = [None] * n, None, None
+    for i in range(n):
+        if trr[i] is None:
+            continue
+        if trr[i] != 0:                     # fixnan(): a zero true range keeps the previous +DI / -DI
+            plus, minus = 100 * pr[i] / trr[i], 100 * mr[i] / trr[i]
+        if plus is None:
+            continue
+        s = plus + minus
+        dx[i] = abs(plus - minus) / (s if s != 0 else 1)
+    return [None if v is None else 100 * v for v in rma(dx, adx_len)]
+
+
 # ── signals and trades ────────────────────────────────────────────────────
 def signals(candles, t0, t1, mode):
     ref.candles = candles
@@ -197,6 +240,13 @@ class TFIndex:
         bars, ots, cts, e = self.get(tf)
         i = bisect.bisect_right(cts, t) - 1
         return e[i] if i >= 0 else None
+    def adx_at(self, tf, t):
+        """ADX of the last candle of `tf` that closed at or before t."""
+        if ('adx', tf) not in self.c:
+            self.c[('adx', tf)] = adx(self.get(tf)[0])
+        cts, a = self.get(tf)[2], self.c[('adx', tf)]
+        i = bisect.bisect_right(cts, t) - 1
+        return a[i] if i >= 0 else None
     def limit(self, tf, t):
         bars, ots, cts, _ = self.get(tf)
         i = max(bisect.bisect_right(ots, t) - 1, 0)

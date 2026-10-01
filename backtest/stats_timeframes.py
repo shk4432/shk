@@ -10,9 +10,18 @@ def load(sym):
     return pickle.load(open(f'{HERE}/data/trades_tf_{RUN}_{sym}.pkl', 'rb'))['trades']
 
 
-def passes(t, f):
+ADX_MIN = 20   # ADX filter: trade only when the ADX of the divergence's timeframe is above this
+FILTERS = ('none', 'ema', 'adx', 'ema+adx')
+
+
+def passes(t, f, adx_min=ADX_MIN):
+    """f: 'none', 'ema' (long above / short below EMA 200), 'adx' (ADX > adx_min) or 'ema+adx'."""
     if f == 'none':
         return True
+    if f == 'ema+adx':
+        return passes(t, 'ema') and passes(t, 'adx', adx_min)
+    if f == 'adx':
+        return t.get('adx') is not None and t['adx'] > adx_min
     e = t.get('ema')
     if e is None:
         return False
@@ -49,7 +58,7 @@ def build():
     rows = []
     for sym in SYMS + ['ALL']:
         pool = trades[sym] if sym in trades else [t for s in SYMS for t in trades[s]]
-        for f in ('none', 'ema'):
+        for f in FILTERS:
             pf = [t for t in pool if passes(t, f)]
             for tf in TFS + ['ALL']:
                 pt = pf if tf == 'ALL' else [t for t in pf if t['tf'] == tf]
@@ -68,7 +77,7 @@ if __name__ == '__main__':
     print('rows', len(rows), os.path.getsize(f'{HERE}/data/report_tf_{RUN}.json'))
     ix = {tuple(r[:5]): r for r in rows}
     for sym in SYMS:
-        for f in ('none', 'ema'):
+        for f in FILTERS:
             print(f'\n### {sym} filter={f}  (n | risk% | 1R win% avg gross/net ±CI | 2R win% avg net | 3R win% avg net | open1 | hold1 days)')
             for tf in TFS + ['ALL']:
                 g = ix[(sym, f, 0, tf, 'all')]; nt = ix[(sym, f, 1, tf, 'all')]
