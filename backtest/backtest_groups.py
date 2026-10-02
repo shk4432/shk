@@ -1,10 +1,11 @@
 """Backtest of the chosen setup plus the 3-timeframe rule.
 
 Setup (as in backtest_timeframes.py ... conf 2 close both): swing points on closes, signal after the second swing
-is confirmed with 2 candles, divergence with RSI and Mega RSI together, timeframes 2H to 12H.
+is confirmed with 2 candles, divergence with RSI and Mega RSI together. Timeframe band 'mid' = 2H to 12H (the chosen
+setup), 'low' = 5m to 1H.
 
 3-timeframe rule (the original rule of the indicator, engine.mtf):
-  three consecutive timeframes of the ladder 2H 3H 4H 6H 8H 10H 12H have an active divergence of the same direction
+  three consecutive timeframes of the band (e.g. 2H 3H 4H 6H 8H 10H 12H) have an active divergence of the same direction
   at the same moment, and their second swing points are the same swing: each lies within one candle of the largest
   of the three timeframes from the largest timeframe's second swing point. The signal comes when a group becomes
   true; the same group gives one signal per swing.
@@ -14,7 +15,7 @@ Filters are applied in group_trades(): EMA 200 of all three timeframes (or none)
 a new trade when the candle of one of its second swing points overlaps in time with the candle of a second swing point
 of a trade already taken in the same direction (the same swing seen by another group, e.g. 3H-4H-6H and 8H-10H-12H).
 
-  python3 backtest_groups.py BTCUSDT [years]   -> data/trades_grp_conf2cb_{years}y_BTCUSDT.pkl
+  python3 backtest_groups.py BTCUSDT [years] [mid|low]   -> data/trades_grp_conf2cb_{years}y[_low]_BTCUSDT.pkl
 """
 import sys, os, pickle, datetime as dt
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -23,14 +24,17 @@ from backtest import ref, COST_SIDE, MIN, TF_OF, tf_seconds
 from backtest_timeframes import load_window, simulate
 
 MID = ['2H', '3H', '4H', '6H', '8H', '10H', '12H']
+LOW = ['5m', '10m', '15m', '30m', '1H']
+BANDS = {'mid': MID, 'low': LOW}
+ORDER = [nm for _, nm in ref.LADDER]
 P = dict(ref.P)
 P.update(early=False, pivR=2, useClose=True, mode='BOTH', needTF=3, syncOn=True, syncTol=1, groups='up')
 
 
-def group_signals(candles, t0, t1):
+def group_signals(candles, t0, t1, band='mid'):
     ref.candles = candles
-    chart, per_tf, fires = ref.mtf('5', t0, t1, p=P, buf_days=4000, enabled=set(MID))
-    assert [nm for _, nm, _, _ in per_tf] == MID
+    chart, per_tf, fires = ref.mtf('5', t0, t1, p=P, buf_days=4000, enabled=set(BANDS[band]))
+    assert [nm for _, nm, _, _ in per_tf] == BANDS[band]
     idx = {c['ot']: i for i, c in enumerate(chart)}
     pos = {nm: k for k, (_, nm, _, _) in enumerate(per_tf)}
     sigs = []
@@ -47,24 +51,28 @@ def group_signals(candles, t0, t1):
     return sigs
 
 
-def run(sym, years=5):
+def suffix(band):
+    return '' if band == 'mid' else '_' + band
+
+
+def run(sym, years=5, band='mid'):
     market, candles, base5, t0, t1 = load_window(sym, years)
     times5 = [b[0] for b in base5]
     ix = bt2.TFIndex(candles)
     trades = []
-    for s in group_signals(candles, t0, t1):
+    for s in group_signals(candles, t0, t1, band):
         if not (t0 <= s['t'] <= t1 + 5 * MIN):
             continue
-        # every timeframe of the group is above the 5m chart: EMA of its last closed candle
-        s['emas'] = [ix.ema_at(TF_OF[tf], s['ot']) for tf in s['tfs']]
+        # the 5m chart's own timeframe is read from the current candle, higher ones from their last closed candle
+        s['emas'] = [ix.ema_at(TF_OF[tf], s['t'] if tf == '5m' else s['ot']) for tf in s['tfs']]
         s['sym'], s['market'] = sym, market
         for name, stop in (('large', s['sls'][-1]), ('small', s['sls'][0])):
             r = simulate(dict(s, stop=stop), base5, times5, COST_SIDE[market])
             s[name] = dict(stop=stop, **r)
         trades.append(s)
     pickle.dump(dict(trades=trades, t0=t0, t1=t1, last=base5[-1][0]),
-                open(f'{HERE}/data/trades_grp_conf2cb_{years}y_{sym}.pkl', 'wb'))
-    print(sym, 'group signals', len(trades), dt.datetime.utcfromtimestamp(t0 / 1000).date(), '->',
+                open(f'{HERE}/data/trades_grp_conf2cb_{years}y{suffix(band)}_{sym}.pkl', 'wb'))
+    print(sym, band, 'group signals', len(trades), dt.datetime.utcfromtimestamp(t0 / 1000).date(), '->',
           dt.datetime.utcfromtimestamp(t1 / 1000).date(), flush=True)
 
 
@@ -78,7 +86,7 @@ def group_trades(signals, f='ema', stop='large'):
     """Trades actually taken with filter f ('ema' or 'none') and stop ('large' or 'small'): flat dicts like the
     per-timeframe trades (out, cost, exit_t, riskPct, ...), one per swing."""
     used, out = {'bu': [], 'be': []}, []
-    for s in sorted(signals, key=lambda x: (x['t'], MID.index(x['tfs'][0]))):
+    for s in sorted(signals, key=lambda x: (x['t'], ORDER.index(x['tfs'][0]))):
         r = s[stop]
         if r.get('invalid') or (f == 'ema' and not ema_ok(s)):
             continue                                  # no signal: the price is beyond the stop or on the wrong side of an EMA
@@ -91,4 +99,4 @@ def group_trades(signals, f='ema', stop='large'):
 
 
 if __name__ == '__main__':
-    run(sys.argv[1], int(sys.argv[2]) if len(sys.argv) > 2 else 5)
+    run(sys.argv[1], int(sys.argv[2]) if len(sys.argv) > 2 else 5, sys.argv[3] if len(sys.argv) > 3 else 'mid')
