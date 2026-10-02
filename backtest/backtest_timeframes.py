@@ -82,8 +82,8 @@ def years_before(ms, years):
     return int(d.replace(year=d.year - years).timestamp() * 1000)
 
 
-def run(sym, timing, pivR=2, swings='hl', osc='ci', years=1):
-    early = timing == 'early'
+def load_window(sym, years=1):
+    """Candle source, 5m candles and the test window [t0, t1] of the last `years` years."""
     market = MARKET[sym]
     if market == 'crypto':
         candles, base5 = bt2.load_crypto(sym)
@@ -95,7 +95,12 @@ def run(sym, timing, pivR=2, swings='hl', osc='ci', years=1):
         candles, base5 = bt2.load_session(sym, market, int(base_from.timestamp() * 1000))
         t1 = base5[-1][0]
         t0 = years_before(t1, years)
-    base5 = [tuple(b) for b in base5]
+    return market, candles, [tuple(b) for b in base5], t0, t1
+
+
+def run(sym, timing, pivR=2, swings='hl', osc='ci', years=1):
+    early = timing == 'early'
+    market, candles, base5, t0, t1 = load_window(sym, years)
     times5 = [b[0] for b in base5]
     ix = bt2.TFIndex(candles)
     trades = []
